@@ -1,7 +1,0 @@
-{
-  "_comment": "StaleGuard Bifrost Plugin Configuration Example",
-  "service_url": "http://localhost:3001",
-  "timeout_ms": 2000,
-  "basic_mode": false,
-  "api_key": ""
-}
