@@ -1,0 +1,375 @@
+package main
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+)
+
+// ─── helpers ────────────────────────────────────────────
+
+func testPlugin(basicMode bool, serviceURL string, timeoutMs int) *FreshnessGuardPlugin {
+	return newPlugin(PluginConfig{
+		BasicMode:      basicMode,
+		ServiceURL:     serviceURL,
+		TimeoutMs:      timeoutMs,
+		ScoreThreshold: 0.75,
+		InjectNote:     true,
+	})
+}
+
+func makeResponse(text string) *BifrostResponse {
+	s := text
+	return &BifrostResponse{
+		Provider: "openai",
+		ChatResponse: &BifrostChatResponse{
+			Model: "gpt-4o",
+			Choices: []BifrostResponseChoice{
+				{
+					ChatNonStreamResponseChoice: &ChatNonStreamResponseChoice{
+						Message: &ChatMessage{
+							Role: "assistant",
+							Content: &ChatMessageContent{
+								ContentStr: &s,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func getText(resp *BifrostResponse) string {
+	if resp == nil || resp.ChatResponse == nil || len(resp.ChatResponse.Choices) == 0 {
+		return ""
+	}
+	c := resp.ChatResponse.Choices[0].Message
+	if c == nil || c.Content == nil || c.Content.ContentStr == nil {
+		return ""
+	}
+	return *c.Content.ContentStr
+}
+
+// ─── basic mode tests ────────────────────────────────────
+
+func TestExtractBasicClaims_Versions(t *testing.T) {
+	text := "Use the SDK v2.1.0 or the new v3.0.0-beta release."
+	claims := extractBasicClaims(text)
+	versions := 0
+	for _, c := range claims {
+		if c.Category == "version" {
+			versions++
+		}
+	}
+	if versions < 2 {
+		t.Errorf("expected >=2 version claims, got %d (claims: %+v)", versions, claims)
+	}
+}
+
+func TestExtractBasicClaims_Prices(t *testing.T) {
+	text := "The Pro plan is $29.99/month and Enterprise is $299 per year."
+	claims := extractBasicClaims(text)
+	prices := 0
+	for _, c := range claims {
+		if c.Category == "pricing" {
+			prices++
+		}
+	}
+	if prices < 1 {
+		t.Errorf("expected >=1 price claim, got %d", prices)
+	}
+}
+
+func TestExtractBasicClaims_Leadership(t *testing.T) {
+	text := "The CEO of TechCorp is Jane Doe and the CTO is John Smith."
+	claims := extractBasicClaims(text)
+	leadership := 0
+	for _, c := range claims {
+		if c.Category == "leadership" {
+			leadership++
+		}
+	}
+	if leadership < 1 {
+		t.Errorf("expected >=1 leadership claim, got %d (claims: %+v)", leadership, claims)
+	}
+}
+
+func TestBasicMode_NoteAppended(t *testing.T) {
+	text := "GPT-4 API v1.0 costs $0.03/token and is the latest model as of 2024."
+	resp := makeResponse(text)
+	p := testPlugin(true, "", 2000)
+
+	got, err, _ := p.PostLLMHook(nil, resp, nil)
+	if err != nil {
+		t.Fatalf("unexpected BifrostError: %v", err)
+	}
+	content := getText(got)
+	if !strings.Contains(content, "[FreshnessGuard]") {
+		t.Errorf("expected FreshnessGuard note in response, got:\n%s", content)
+	}
+	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "basic" {
+		t.Errorf("expected mode=basic, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	}
+}
+
+func TestBasicMode_NoNoteForCleanText(t *testing.T) {
+	text := "The capital of France is Paris."
+	resp := makeResponse(text)
+	p := testPlugin(true, "", 2000)
+
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	content := getText(got)
+	if strings.Contains(content, "[FreshnessGuard]") {
+		t.Errorf("did not expect a note for stable text, got:\n%s", content)
+	}
+}
+
+// ─── fail-open tests ─────────────────────────────────────
+
+func TestFailOpen_SlowService(t *testing.T) {
+	// Server that sleeps 5 seconds — far beyond our 100ms timeout
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(5 * time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	originalText := "GPT-4 API v1.0 costs $0.03/token."
+	resp := makeResponse(originalText)
+	p := testPlugin(false, srv.URL, 100) // 100ms timeout
+
+	got, bErr, err := p.PostLLMHook(nil, resp, nil)
+	if err != nil {
+		t.Fatalf("plugin returned unexpected error: %v", err)
+	}
+	if bErr != nil {
+		t.Fatalf("plugin returned unexpected BifrostError: %v", bErr)
+	}
+	if got == nil {
+		t.Fatal("FAIL OPEN: response must not be nil")
+	}
+	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("FAIL OPEN: expected mode=bypass, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	}
+	// Original text must be untouched
+	if getText(got) != originalText {
+		t.Errorf("FAIL OPEN: text modified; got:\n%s", getText(got))
+	}
+}
+
+func TestFailOpen_ServiceDown(t *testing.T) {
+	// No server listening on this port
+	resp := makeResponse("Python 3.11 is the latest stable version.")
+	p := testPlugin(false, "http://127.0.0.1:19999", 500)
+
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("expected bypass when service is down, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	}
+}
+
+func TestFailOpen_Service500(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	resp := makeResponse("Python 3.11 is the latest stable version.")
+	p := testPlugin(false, srv.URL, 2000)
+
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("expected bypass for HTTP 500, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	}
+}
+
+// ─── service mode tests ───────────────────────────────────
+
+func TestServiceMode_StaleResponse(t *testing.T) {
+	svcResp := ServiceResponse{
+		OverallScore: 0.25,
+		StaleCount:   2,
+		TotalClaims:  3,
+		Claims: []ClaimResult{
+			{Text: "$0.03/token", Category: "pricing", ExtractedValue: "$0.03", Verdict: "stale", LiveValue: "$0.01", Score: 0.1, SourceURL: "https://openai.com/pricing"},
+			{Text: "v1.0", Category: "version", ExtractedValue: "v1.0", Verdict: "stale", LiveValue: "v2.0", Score: 0.1, SourceURL: "https://platform.openai.com/docs"},
+			{Text: "gpt-4", Category: "version", ExtractedValue: "gpt-4", Verdict: "current", Score: 0.9},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/check" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(svcResp)
+	}))
+	defer srv.Close()
+
+	resp := makeResponse("GPT-4 API v1.0 costs $0.03/token.")
+	p := testPlugin(false, srv.URL, 2000)
+
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "service" {
+		t.Errorf("expected mode=service, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	}
+	if got.ExtraHeaders["X-FreshnessGuard-Score"] != "0.250" {
+		t.Errorf("expected score=0.250, got %q", got.ExtraHeaders["X-FreshnessGuard-Score"])
+	}
+	if got.ExtraHeaders["X-FreshnessGuard-Stale"] != "2" {
+		t.Errorf("expected stale=2, got %q", got.ExtraHeaders["X-FreshnessGuard-Stale"])
+	}
+	content := getText(got)
+	if !strings.Contains(content, "[FreshnessGuard]") {
+		t.Errorf("expected note in content; got:\n%s", content)
+	}
+	if !strings.Contains(content, "openai.com/pricing") {
+		t.Errorf("expected source URL in content; got:\n%s", content)
+	}
+}
+
+func TestServiceMode_AllCurrent(t *testing.T) {
+	svcResp := ServiceResponse{OverallScore: 0.95, StaleCount: 0, TotalClaims: 2}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(svcResp)
+	}))
+	defer srv.Close()
+
+	text := "React v18 is the current stable release."
+	resp := makeResponse(text)
+	p := testPlugin(false, srv.URL, 2000)
+
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	// No stale claims → no note appended
+	if strings.Contains(getText(got), "[FreshnessGuard]") {
+		t.Error("unexpected note when all claims are current")
+	}
+}
+
+// ─── nil safety tests ─────────────────────────────────────
+
+func TestNilResponse(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+	got, _, err := p.PostLLMHook(nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatal("expected nil response when input is nil")
+	}
+}
+
+func TestNilChatResponse(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+	resp := &BifrostResponse{ChatResponse: nil}
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	if got == nil {
+		t.Fatal("expected non-nil response")
+	}
+}
+
+func TestNilContent(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+	resp := &BifrostResponse{
+		ChatResponse: &BifrostChatResponse{
+			Choices: []BifrostResponseChoice{
+				{ChatNonStreamResponseChoice: &ChatNonStreamResponseChoice{
+					Message: &ChatMessage{Role: "assistant", Content: nil},
+				}},
+			},
+		},
+	}
+	// Must not panic
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	if got == nil {
+		t.Fatal("expected non-nil response")
+	}
+}
+
+func TestEmptyChoices(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+	resp := &BifrostResponse{
+		ChatResponse: &BifrostChatResponse{Choices: []BifrostResponseChoice{}},
+	}
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	if got == nil {
+		t.Fatal("expected non-nil response")
+	}
+}
+
+// ─── headers test ─────────────────────────────────────────
+
+func TestHeadersInjected(t *testing.T) {
+	text := "React v18 costs $0 (open source) as of 2024."
+	resp := makeResponse(text)
+	p := testPlugin(true, "", 2000)
+	p.logger = log.New(os.Stderr, "", 0) // suppress output
+
+	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	requiredHeaders := []string{
+		"X-FreshnessGuard-Score",
+		"X-FreshnessGuard-Stale",
+		"X-FreshnessGuard-Latency",
+		"X-FreshnessGuard-Mode",
+	}
+	for _, h := range requiredHeaders {
+		if _, ok := got.ExtraHeaders[h]; !ok {
+			t.Errorf("missing header: %s (all headers: %v)", h, got.ExtraHeaders)
+		}
+	}
+}
+
+// ─── GetName / Cleanup ────────────────────────────────────
+
+func TestGetName(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+	if p.GetName() != "freshnessguard" {
+		t.Errorf("wrong name: %q", p.GetName())
+	}
+}
+
+func TestCleanup(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+	if err := p.Cleanup(); err != nil {
+		t.Errorf("Cleanup() returned error: %v", err)
+	}
+}
+
+// ─── InitPlugin ───────────────────────────────────────────
+
+func TestInitPlugin(t *testing.T) {
+	cfg := map[string]interface{}{
+		"service_url":     "http://localhost:3001",
+		"timeout_ms":      float64(3000),
+		"basic_mode":      false,
+		"score_threshold": float64(0.8),
+		"inject_note":     true,
+		"api_key":         "secret",
+	}
+	plugin, err := InitPlugin(cfg)
+	if err != nil {
+		t.Fatalf("InitPlugin failed: %v", err)
+	}
+	if plugin == nil {
+		t.Fatal("InitPlugin returned nil")
+	}
+	fg, ok := plugin.(*FreshnessGuardPlugin)
+	if !ok {
+		t.Fatalf("unexpected type: %T", plugin)
+	}
+	if fg.cfg.ServiceURL != "http://localhost:3001" {
+		t.Errorf("service_url not set: %q", fg.cfg.ServiceURL)
+	}
+	if fg.cfg.TimeoutMs != 3000 {
+		t.Errorf("timeout_ms not set: %d", fg.cfg.TimeoutMs)
+	}
+	if fg.cfg.BasicMode {
+		t.Error("basic_mode should be false")
+	}
+}
+

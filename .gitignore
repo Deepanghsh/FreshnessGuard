@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Secrets (never commit these)
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+.next/
+coverage/
+*.so
+*.exe
+*.test
+*.out
+
+# Logs and local data
+*.log
+npm-debug.log*
+data/
+*.db
+*.sqlite
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,248 @@
+[
+  {
+    "id": "eval-01",
+    "category": "pricing",
+    "text": "GPT-4 costs $0.03 per 1K input tokens and $0.06 per 1K output tokens.",
+    "expectedVerdict": "stale",
+    "notes": "Original GPT-4 pricing from March 2023, superseded by GPT-4o"
+  },
+  {
+    "id": "eval-02",
+    "category": "pricing",
+    "text": "GPT-4o costs $2.50 per 1M input tokens and $10.00 per 1M output tokens.",
+    "expectedVerdict": "current",
+    "notes": "Current official OpenAI pricing as of mid-2024"
+  },
+  {
+    "id": "eval-03",
+    "category": "pricing",
+    "text": "Claude 3 Opus costs $15 per 1M input tokens and $75 per 1M output tokens.",
+    "expectedVerdict": "current",
+    "notes": "Anthropic official pricing"
+  },
+  {
+    "id": "eval-04",
+    "category": "pricing",
+    "text": "Twitter API v2 Basic tier is completely free for all developers.",
+    "expectedVerdict": "stale",
+    "notes": "Twitter API Basic tier costs $100/month since 2023"
+  },
+  {
+    "id": "eval-05",
+    "category": "pricing",
+    "text": "Netflix Standard plan in the US is $9.99 per month.",
+    "expectedVerdict": "stale",
+    "notes": "Price increased multiple times, now $15.49"
+  },
+  {
+    "id": "eval-06",
+    "category": "pricing",
+    "text": "Spotify Premium Individual is $11.99 per month in the United States.",
+    "expectedVerdict": "current",
+    "notes": "Updated US price following 2024 price bump"
+  },
+  {
+    "id": "eval-07",
+    "category": "pricing",
+    "text": "Amazon Prime costs $99 per year in the US.",
+    "expectedVerdict": "stale",
+    "notes": "Amazon Prime increased to $119 in 2018 and $139 in 2022"
+  },
+  {
+    "id": "eval-08",
+    "category": "pricing",
+    "text": "GitHub Copilot Individual plan is $10 per month or $100 per year.",
+    "expectedVerdict": "current",
+    "notes": "Standard established Copilot Individual pricing"
+  },
+  {
+    "id": "eval-09",
+    "category": "pricing",
+    "text": "YouTube Premium Individual subscription is $7.99 per month.",
+    "expectedVerdict": "stale",
+    "notes": "Raised to $13.99/mo in US"
+  },
+  {
+    "id": "eval-10",
+    "category": "pricing",
+    "text": "Vercel Pro team plan is $20 per user per month.",
+    "expectedVerdict": "current",
+    "notes": "Standard Vercel Pro tier pricing"
+  },
+  {
+    "id": "eval-11",
+    "category": "version",
+    "text": "The latest stable version of React is 17.0.2.",
+    "expectedVerdict": "stale",
+    "notes": "React is at 18.x and React 19 is released"
+  },
+  {
+    "id": "eval-12",
+    "category": "version",
+    "text": "React 18 introduced automatic batching and concurrent features.",
+    "expectedVerdict": "current",
+    "notes": "Historical architectural fact"
+  },
+  {
+    "id": "eval-13",
+    "category": "version",
+    "text": "Next.js 12 is the latest version featuring the Pages router.",
+    "expectedVerdict": "stale",
+    "notes": "Next.js is currently 14.x/15.x"
+  },
+  {
+    "id": "eval-14",
+    "category": "version",
+    "text": "Node.js 14 is the current active LTS release.",
+    "expectedVerdict": "stale",
+    "notes": "Node 14 reached End-of-Life in 2023, Node 20/22 are LTS"
+  },
+  {
+    "id": "eval-15",
+    "category": "version",
+    "text": "Python 3.12 was released with improved error messages and per-interpreter GIL.",
+    "expectedVerdict": "current",
+    "notes": "Accurate release feature"
+  },
+  {
+    "id": "eval-16",
+    "category": "version",
+    "text": "Python 2.7 is actively supported by the Python Software Foundation.",
+    "expectedVerdict": "stale",
+    "notes": "Python 2.7 reached EOL on Jan 1, 2020"
+  },
+  {
+    "id": "eval-17",
+    "category": "version",
+    "text": "TypeScript 5 introduced decorators conforming to the ECMAScript stage 3 standard.",
+    "expectedVerdict": "current",
+    "notes": "Accurate TypeScript 5 feature"
+  },
+  {
+    "id": "eval-18",
+    "category": "version",
+    "text": "Tailwind CSS v3 uses the Just-in-Time engine by default.",
+    "expectedVerdict": "current",
+    "notes": "Accurate Tailwind CSS v3 architecture"
+  },
+  {
+    "id": "eval-19",
+    "category": "version",
+    "text": "Kubernetes has deprecated Docker as a container runtime in v1.24.",
+    "expectedVerdict": "current",
+    "notes": "Dockershim removed in K8s 1.24"
+  },
+  {
+    "id": "eval-20",
+    "category": "version",
+    "text": "Angular 2 is the most recent rewrite of AngularJS.",
+    "expectedVerdict": "stale",
+    "notes": "Angular is now on v17/v18"
+  },
+  {
+    "id": "eval-21",
+    "category": "leadership",
+    "text": "Parag Agrawal is the current CEO of Twitter.",
+    "expectedVerdict": "stale",
+    "notes": "Replaced after Elon Musk takeover, Linda Yaccarino is X CEO"
+  },
+  {
+    "id": "eval-22",
+    "category": "leadership",
+    "text": "Satya Nadella is the CEO of Microsoft.",
+    "expectedVerdict": "current",
+    "notes": "Accurate current leadership"
+  },
+  {
+    "id": "eval-23",
+    "category": "leadership",
+    "text": "Bob Chapek is the Chief Executive Officer of The Walt Disney Company.",
+    "expectedVerdict": "stale",
+    "notes": "Bob Iger returned as Disney CEO in late 2022"
+  },
+  {
+    "id": "eval-24",
+    "category": "leadership",
+    "text": "Sundar Pichai is the CEO of Alphabet and Google.",
+    "expectedVerdict": "current",
+    "notes": "Accurate current leadership"
+  },
+  {
+    "id": "eval-25",
+    "category": "leadership",
+    "text": "Jeff Bezos is the active CEO of Amazon.",
+    "expectedVerdict": "stale",
+    "notes": "Andy Jassy succeeded Jeff Bezos as Amazon CEO in 2021"
+  },
+  {
+    "id": "eval-26",
+    "category": "law",
+    "text": "The EU AI Act entered into force in 2024 to regulate artificial intelligence systems.",
+    "expectedVerdict": "current",
+    "notes": "EU AI Act enacted mid-2024"
+  },
+  {
+    "id": "eval-27",
+    "category": "law",
+    "text": "Under the EU GDPR, the maximum fine is €20 million or 4% of global annual turnover.",
+    "expectedVerdict": "current",
+    "notes": "Standard statutory GDPR fine tier"
+  },
+  {
+    "id": "eval-28",
+    "category": "law",
+    "text": "The EU-US Privacy Shield remains the valid legal transfer mechanism for trans-Atlantic data flows.",
+    "expectedVerdict": "stale",
+    "notes": "Invalidated in Schrems II (2020), replaced by Data Privacy Framework (2023)"
+  },
+  {
+    "id": "eval-29",
+    "category": "law",
+    "text": "California Consumer Privacy Act (CCPA) gives consumers the right to opt-out of the sale of personal information.",
+    "expectedVerdict": "current",
+    "notes": "Standard CCPA provision"
+  },
+  {
+    "id": "eval-30",
+    "category": "law",
+    "text": "Section 230 of the Communications Decency Act was completely repealed by Congress.",
+    "expectedVerdict": "stale",
+    "notes": "Section 230 remains active federal law despite numerous reform proposals"
+  },
+  {
+    "id": "eval-31",
+    "category": "date",
+    "text": "The Paris 2024 Summer Olympics took place in July and August 2024.",
+    "expectedVerdict": "current",
+    "notes": "Event successfully concluded"
+  },
+  {
+    "id": "eval-32",
+    "category": "date",
+    "text": "The next total solar eclipse visible from North America will occur in 2024.",
+    "expectedVerdict": "stale",
+    "notes": "The 2024 North American solar eclipse occurred on April 8, 2024 (past)"
+  },
+  {
+    "id": "eval-33",
+    "category": "date",
+    "text": "The next FIFA Men's World Cup will be hosted in 2026 across the USA, Canada, and Mexico.",
+    "expectedVerdict": "current",
+    "notes": "Scheduled 2026 World Cup"
+  },
+  {
+    "id": "eval-34",
+    "category": "date",
+    "text": "Windows 10 reaches end of support in October 2025.",
+    "expectedVerdict": "current",
+    "notes": "Official Microsoft lifecycle date: October 14, 2025"
+  },
+  {
+    "id": "eval-35",
+    "category": "date",
+    "text": "The James Webb Space Telescope launched in 2021 and operational science began in 2022.",
+    "expectedVerdict": "current",
+    "notes": "Verified historical astronomical milestone"
+  }
+]
+
