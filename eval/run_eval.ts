@@ -56,7 +56,7 @@ async function runEvaluation() {
       }
 
       const data = await response.json() as any;
-      const actualVerdict = data.hasStale ? 'stale' : 'current';
+      const actualVerdict = (data.hasStale || (typeof data.staleCount === 'number' && data.staleCount > 0) || (Array.isArray(data.claims) && data.claims.some((c: any) => c.verdict === 'stale'))) ? 'stale' : 'current';
       const isCorrect = actualVerdict === item.expectedVerdict;
 
       if (item.expectedVerdict === 'stale') {

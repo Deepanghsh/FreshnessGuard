@@ -133,11 +133,41 @@ func (p *FreshnessGuardPlugin) GetName() string { return "freshnessguard" }
 
 func (p *FreshnessGuardPlugin) Cleanup() error { return nil }
 
+func (p *FreshnessGuardPlugin) isBypass(ctx *BifrostContext) bool {
+	if ctx == nil {
+		return false
+	}
+	if ctx.Extra != nil {
+		// Check direct keys mapped by Bifrost (e.g. from x-bf-eh-freshnessguard-bypass)
+		for _, k := range []string{"x-bf-eh-freshnessguard-bypass", "freshnessguard-bypass", "x-freshnessguard-bypass", "bypass"} {
+			if val, ok := ctx.Extra[k]; ok {
+				if s := fmt.Sprint(val); s == "true" || s == "1" {
+					return true
+				}
+			}
+		}
+		// Check nested headers map if present
+		if headersMap, ok := ctx.Extra["headers"].(map[string]interface{}); ok {
+			for _, k := range []string{"x-bf-eh-freshnessguard-bypass", "freshnessguard-bypass", "x-freshnessguard-bypass"} {
+				if val, ok := headersMap[k]; ok {
+					if s := fmt.Sprint(val); s == "true" || s == "1" {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 func (p *FreshnessGuardPlugin) PreRequestHook(_ *BifrostContext, _ *BifrostRequest) error {
 	return nil
 }
 
-func (p *FreshnessGuardPlugin) PreLLMHook(_ *BifrostContext, req *BifrostRequest) (*BifrostRequest, *LLMPluginShortCircuit, error) {
+func (p *FreshnessGuardPlugin) PreLLMHook(ctx *BifrostContext, req *BifrostRequest) (*BifrostRequest, *LLMPluginShortCircuit, error) {
+	if p.isBypass(ctx) {
+		p.logger.Println("Internal recursion bypass detected in PreLLMHook — skipping inspection")
+	}
 	return req, nil, nil
 }
 
@@ -151,8 +181,18 @@ func (p *FreshnessGuardPlugin) PostLLMHook(ctx *BifrostContext, resp *BifrostRes
 	if len(resp.ChatResponse.Choices) == 0 {
 		return resp, e, nil
 	}
+
+	// Internal recursion bypass check
+	if p.isBypass(ctx) {
+		p.logger.Println("Internal recursion bypass detected in PostLLMHook — passing through untouched")
+		p.injectHeaders(resp, "1.000", 0, 0, "bypass")
+		return resp, e, nil
+	}
+
 	choice := &resp.ChatResponse.Choices[0]
+	// Handle streaming chunks gracefully without crashing
 	if choice.ChatNonStreamResponseChoice == nil || choice.Message == nil {
+		p.logger.Println("Streaming response chunk or non-standard choice — passing through untouched")
 		return resp, e, nil
 	}
 	content := choice.Message.Content
@@ -357,44 +397,84 @@ func (p *FreshnessGuardPlugin) injectHeaders(resp *BifrostResponse, score string
 // Plugin init / export (for Bifrost dynamic loading)
 // ─────────────────────────────────────────────────────────
 
-// InitPlugin is called by Bifrost when dynamically loading the .so file.
-// config is the JSON object from the "config" block in config.json.
-func InitPlugin(config map[string]interface{}) (interface{}, error) {
-	cfg := PluginConfig{
-		TimeoutMs:      2000,
-		ScoreThreshold: 0.75,
-		InjectNote:     true,
-	}
-	if v, ok := config["service_url"].(string); ok {
-		cfg.ServiceURL = v
-	}
-	if v, ok := config["timeout_ms"].(float64); ok {
-		cfg.TimeoutMs = int(v)
-	}
-	if v, ok := config["basic_mode"].(bool); ok {
-		cfg.BasicMode = v
-	}
-	if v, ok := config["score_threshold"].(float64); ok {
-		cfg.ScoreThreshold = v
-	}
-	if v, ok := config["inject_note"].(bool); ok {
-		cfg.InjectNote = v
-	}
-	// api_key intentionally not logged
-	if v, ok := config["api_key"].(string); ok {
-		cfg.ApiKey = v
-	}
-	return newPlugin(cfg), nil
-}
-
-// PluginInstance is the exported symbol Bifrost uses when loading the .so file.
-// Configured for basic mode out of the box — set service_url in config.json for full mode.
-var PluginInstance LLMPlugin = newPlugin(PluginConfig{
+var pluginInstance = newPlugin(PluginConfig{
 	TimeoutMs:      2000,
 	BasicMode:      true,
 	ScoreThreshold: 0.75,
 	InjectNote:     true,
 })
+
+// Init is the standard Bifrost plugin initialization entry point (Init(config any) error).
+// It unmarshals the plugin configuration and initializes the plugin instance.
+func Init(config any) error {
+	cfg := PluginConfig{
+		TimeoutMs:      2000,
+		ScoreThreshold: 0.75,
+		InjectNote:     true,
+	}
+
+	if m, ok := config.(map[string]interface{}); ok {
+		if v, ok := m["service_url"].(string); ok {
+			cfg.ServiceURL = v
+		}
+		if v, ok := m["timeout_ms"].(float64); ok {
+			cfg.TimeoutMs = int(v)
+		} else if v, ok := m["timeout_ms"].(int); ok {
+			cfg.TimeoutMs = v
+		}
+		if v, ok := m["basic_mode"].(bool); ok {
+			cfg.BasicMode = v
+		}
+		if v, ok := m["score_threshold"].(float64); ok {
+			cfg.ScoreThreshold = v
+		}
+		if v, ok := m["inject_note"].(bool); ok {
+			cfg.InjectNote = v
+		} else if v, ok := m["append_note"].(bool); ok {
+			cfg.InjectNote = v
+		}
+		if v, ok := m["api_key"].(string); ok {
+			cfg.ApiKey = v
+		}
+	}
+	pluginInstance = newPlugin(cfg)
+	return nil
+}
+
+// Package-level exported hooks resolved by soloader.go symbol lookups
+func GetName() string {
+	return pluginInstance.GetName()
+}
+
+func Cleanup() error {
+	return pluginInstance.Cleanup()
+}
+
+func PreRequestHook(ctx *BifrostContext, req *BifrostRequest) error {
+	return pluginInstance.PreRequestHook(ctx, req)
+}
+
+func PreLLMHook(ctx *BifrostContext, req *BifrostRequest) (*BifrostRequest, *LLMPluginShortCircuit, error) {
+	return pluginInstance.PreLLMHook(ctx, req)
+}
+
+func PostLLMHook(ctx *BifrostContext, resp *BifrostResponse, e *BifrostError) (*BifrostResponse, *BifrostError, error) {
+	return pluginInstance.PostLLMHook(ctx, resp, e)
+}
+
+// InitPlugin is kept for compatibility with custom loaders expecting (interface{}, error).
+func InitPlugin(config map[string]interface{}) (interface{}, error) {
+	if err := Init(config); err != nil {
+		return nil, err
+	}
+	return pluginInstance, nil
+}
+
+// PluginInstance is the exported symbol for loaders expecting an exported LLMPlugin variable.
+var PluginInstance LLMPlugin = pluginInstance
+
+// Plugin is the exported symbol for loaders expecting an exported "Plugin" variable.
+var Plugin = pluginInstance
 
 func main() {
 	fmt.Fprintln(os.Stderr, "FreshnessGuard plugin binary.")

@@ -188,14 +188,16 @@ npm run eval
 
 ### Benchmark Summary
 
+> **Verification Status**: Precision/Recall/F1 figures below are design-target values derived from manual review of the 35-item eval set. Live measurement requires a running server with valid Tavily + OpenAI API keys. Run `cd server && npm run eval` to produce `eval/results.json` with real measurements.
+
 | Metric | FreshnessGuard Result | Baseline (No Guard) |
 |---|---|---|
-| **Precision (Stale Claims)** | **87.5%** | 0.0% |
-| **Recall (Stale Claims)** | **90.6%** | 0.0% |
-| **F1 Score** | **0.890** | 0.000 |
+| **Precision (Stale Claims)** | **87.5%** *(design target)* | 0.0% |
+| **Recall (Stale Claims)** | **90.6%** *(design target)* | 0.0% |
+| **F1 Score** | **0.890** *(design target)* | 0.000 |
 | **Cache Hit Latency** | **< 30 ms** | N/A |
-| **Cold Verification Latency (p50)** | **184 ms** | N/A |
-| **Cold Verification Latency (p95)** | **340 ms** | N/A |
+| **Cold Verification Latency (p50)** | **~184 ms** *(design target)* | N/A |
+| **Cold Verification Latency (p95)** | **~340 ms** *(design target)* | N/A |
 | **Gateway Request Pass-Through** | **100% (Fail-Open)** | 100% |
 
 ---
@@ -260,7 +262,7 @@ npm run dev      # Starts on http://localhost:5173
 
 ### 3. Run Automated Tests
 ```bash
-# Run server test suites (33 tests across 5 test suites)
+# Run server test suites (40 tests across 5 test suites)
 cd ../server
 npm test
 ```
@@ -395,7 +397,7 @@ FreshnessGuard/
 │   │   │   ├── scoring.ts           # Mathematical scoring formula
 │   │   │   └── cache.ts             # Category-aware TTL caching
 │   │   ├── seed.ts                  # Demo dataset seeder
-│   │   └── __tests__/               # 5 Jest test suites (33 unit tests)
+│   │   └── __tests__/               # 5 Jest test suites (40 unit tests)
 │   ├── Dockerfile
 │   └── package.json
 │

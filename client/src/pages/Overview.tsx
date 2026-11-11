@@ -95,18 +95,12 @@ export default function Overview() {
         total: h.total,
       }));
     }
-    // Placeholder sparkline
-    return Array.from({ length: 24 }, (_, i) => ({
-      time: `${i.toString().padStart(2, '0')}:00`,
-      stale: Math.floor(Math.random() * 5),
-      current: Math.floor(Math.random() * 15 + 5),
-      total: 0,
-    }));
+    return [];
   })();
 
   // Sparkline history for stat cards (last 7 hours from hourly)
   const spark = (key: 'stale' | 'current' | 'total') =>
-    chartData.slice(-7).map(d => d[key]);
+    chartData.length > 0 ? chartData.slice(-7).map(d => d[key]) : undefined;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 1400 }} className="animate-fade-in">
@@ -146,12 +140,19 @@ export default function Overview() {
       </div>
 
       {/* ── KPI Cards ─────────────────────────────────────────────────────────── */}
-      <div className="grid-4">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
         <StatCard
           label="Total Scanned"
           value={statsLoading ? '—' : (stats?.totalScanned ?? 0).toLocaleString()}
           sparkData={spark('total')}
           color="var(--accent)"
+          loading={statsLoading}
+        />
+        <StatCard
+          label="Current Claims"
+          value={statsLoading ? '—' : (stats?.totalCurrent ?? 0).toLocaleString()}
+          sparkData={spark('current')}
+          color="var(--current)"
           loading={statsLoading}
         />
         <StatCard
@@ -162,12 +163,11 @@ export default function Overview() {
           loading={statsLoading}
         />
         <StatCard
-          label="Cache Hit Rate"
-          value={statsLoading ? '—' : fmtPct(stats?.cacheHitRate ?? 0)}
+          label="Unverified Claims"
+          value={statsLoading ? '—' : (stats?.totalUnverified ?? 0).toLocaleString()}
           sparkData={undefined}
-          color="var(--accent)"
+          color="var(--unverified)"
           loading={statsLoading}
-          trendLabel={stats ? `${stats.cacheHits} hits / ${stats.cacheMisses} misses` : undefined}
         />
         <StatCard
           label="P95 Overhead"
@@ -185,6 +185,12 @@ export default function Overview() {
           {/* ── Claims Over Time chart ──────────────────────────────────────────── */}
           <div className="panel">
             <h2 style={{ marginBottom: '1rem', fontSize: '0.9375rem' }}>Claims Over Time (last 24h)</h2>
+            {chartData.length === 0 ? (
+              <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: '0.875rem', gap: 6 }}>
+                <span>No claim activity recorded in the last 24 hours.</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--dim)' }}>Verified claims through Bifrost will appear here in real time.</span>
+              </div>
+            ) : (
             <div style={{ height: 220 }} aria-label="Area chart of claims over time" role="img">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
@@ -208,6 +214,7 @@ export default function Overview() {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+            )}
           </div>
 
           {/* ── Live Feed ──────────────────────────────────────────────────────── */}

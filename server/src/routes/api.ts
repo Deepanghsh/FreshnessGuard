@@ -64,6 +64,26 @@ router.post('/check', async (req: Request, res: ExpressResponse, next: NextFunct
     const body = CheckBodySchema.parse(req.body);
     const textHash = hashText(body.text);
 
+    // 0. Bypass check: Internal recursion protection or explicit bypass mode
+    const isBypassHeader = req.headers['x-freshnessguard-bypass'] === 'true' || req.headers['x-bf-eh-freshnessguard-bypass'] === 'true';
+    if (body.mode === 'bypass' || isBypassHeader) {
+      const processingMs = Date.now() - start;
+      return res.status(200).json({
+        requestId: textHash,
+        model: body.model ?? 'unknown',
+        provider: body.provider,
+        originalText: body.text,
+        claims: [],
+        overallScore: 1.0,
+        staleCount: 0,
+        totalClaims: 0,
+        fromCache: false,
+        processingMs,
+        mode: 'bypass',
+        fromLLM: false,
+      });
+    }
+
     // 1. Cache check
     const cached = await getCached(textHash);
     if (cached) {
@@ -82,24 +102,126 @@ router.post('/check', async (req: Request, res: ExpressResponse, next: NextFunct
 
     // 3. Triage
     const { toVerify, skipped } = triageClaims(rawClaims);
+    const mode = body.mode ?? (process.env.FRESHNESSGUARD_MODE as 'inline' | 'async' | 'basic') ?? (process.env.STALEGUARD_MODE as 'inline' | 'async') ?? 'inline';
 
-    // 4. Verification + Scoring
-    const mode = body.mode ?? (process.env.STALEGUARD_MODE as 'inline' | 'async') ?? 'inline';
-    const verifiedClaims: ScoredClaim[] = [];
+    // 4A. Basic mode: local regex scoring only, zero network calls
+    if (mode === 'basic') {
+      const basicClaims: ScoredClaim[] = rawClaims.map(c => {
+        const isRisky = c.likelihood >= 0.75;
+        return {
+          ...c,
+          verdict: isRisky ? ('stale' as const) : ('current' as const),
+          score: isRisky ? 0.35 : 0.85,
+          sources: [],
+          checkedAt: new Date(),
+        };
+      });
+      const staleCount = basicClaims.filter(c => c.verdict === 'stale').length;
+      const overallScore = scoreResponse(basicClaims);
+      const processingMs = Date.now() - start;
+      recordLatency(processingMs);
 
-    for (const claim of toVerify) {
-      const result  = await verifyClaim(claim);
-      const score   = scoreClaim(result);
-      verifiedClaims.push({
-        ...claim,
-        verdict:    result.verdict,
-        liveValue:  result.liveValue,
-        sources:    result.sources,
-        score,
-        checkedAt:  new Date(),
-        correctedText: result.correctedText,
-      } as ScoredClaim);
+      const doc = new ResponseModel({
+        requestId: textHash,
+        model: body.model ?? 'unknown',
+        provider: body.provider,
+        originalText: body.text,
+        claims: basicClaims,
+        overallScore,
+        staleCount,
+        totalClaims: basicClaims.length,
+        fromCache: false,
+        processingMs,
+        mode: 'basic',
+        fromLLM: false,
+      });
+      await doc.save();
+      return res.status(201).json(doc);
     }
+
+    // 4B. Async mode: return immediately with unverified status (202), verify in background
+    if (mode === 'async') {
+      const initialClaims: ScoredClaim[] = rawClaims.map(c => ({
+        ...c,
+        verdict: 'unverified' as const,
+        score: 0.5,
+        sources: [],
+      }));
+      const doc = new ResponseModel({
+        requestId: textHash,
+        model: body.model ?? 'unknown',
+        provider: body.provider,
+        originalText: body.text,
+        claims: initialClaims,
+        overallScore: 0.5,
+        staleCount: 0,
+        totalClaims: initialClaims.length,
+        fromCache: false,
+        processingMs: Date.now() - start,
+        mode: 'async',
+        fromLLM,
+      });
+      await doc.save();
+
+      // Return initial accepted status immediately
+      res.status(202).json(doc);
+
+      // Complete verification asynchronously in the background
+      (async () => {
+        try {
+          const results = await Promise.all(toVerify.map(claim => verifyClaim(claim)));
+          const verifiedClaims: ScoredClaim[] = results.map(r => ({
+            ...r.claim,
+            verdict: r.verdict,
+            liveValue: r.liveValue,
+            sources: r.sources,
+            score: scoreClaim(r),
+            checkedAt: new Date(),
+            correctedText: r.correctedText,
+          }));
+          const allClaims = [
+            ...verifiedClaims,
+            ...skipped.map(c => ({ ...c, verdict: 'unverified' as const, score: 0.5, sources: [] })),
+          ];
+          const staleCount = verifiedClaims.filter(c => c.verdict === 'stale').length;
+          const overallScore = scoreResponse(allClaims);
+          const correctedAnswer = staleCount > 0 ? buildCorrectedAnswer(body.text, allClaims) : undefined;
+          const processingMs = Date.now() - start;
+          recordLatency(processingMs);
+
+          await ResponseModel.findByIdAndUpdate(doc._id, {
+            claims: allClaims,
+            staleCount,
+            overallScore,
+            correctedAnswer,
+            processingMs,
+          });
+
+          broadcastSSE('response_updated', {
+            _id: doc._id,
+            requestId: textHash,
+            overallScore,
+            staleCount,
+            totalClaims: allClaims.length,
+          });
+        } catch (err: any) {
+          console.warn('[FreshnessGuard] Async verification error:', err.message);
+        }
+      })();
+      return;
+    }
+
+    // 4C. Inline mode: parallelized live verification via Tavily with rate limiting
+    const results = await Promise.all(toVerify.map(claim => verifyClaim(claim)));
+    const verifiedClaims: ScoredClaim[] = results.map(r => ({
+      ...r.claim,
+      verdict: r.verdict,
+      liveValue: r.liveValue,
+      sources: r.sources,
+      score: scoreClaim(r),
+      checkedAt: new Date(),
+      correctedText: r.correctedText,
+    }));
 
     // Add skipped claims as unverified with neutral score
     const skippedScored: ScoredClaim[] = skipped.map(c => ({
@@ -110,7 +232,7 @@ router.post('/check', async (req: Request, res: ExpressResponse, next: NextFunct
     }));
 
     const allClaims: ScoredClaim[] = [...verifiedClaims, ...skippedScored];
-    const staleCount  = verifiedClaims.filter(c => c.verdict === 'stale').length;
+    const staleCount = verifiedClaims.filter(c => c.verdict === 'stale').length;
     const overallScore = scoreResponse(allClaims);
     const correctedAnswer = staleCount > 0 ? buildCorrectedAnswer(body.text, allClaims) : undefined;
     const processingMs = Date.now() - start;
@@ -119,11 +241,11 @@ router.post('/check', async (req: Request, res: ExpressResponse, next: NextFunct
     // 5. Persist
     const doc = new ResponseModel({
       requestId: textHash,
-      model:     body.model ?? 'unknown',
-      provider:  body.provider,
+      model: body.model ?? 'unknown',
+      provider: body.provider,
       originalText: body.text,
       correctedAnswer,
-      claims:   allClaims,
+      claims: allClaims,
       overallScore,
       staleCount,
       totalClaims: allClaims.length,
@@ -192,26 +314,44 @@ router.get('/stats', async (req: Request, res: ExpressResponse, next: NextFuncti
   try {
     const [totalScanned, agg, categoryAgg, hourlyAgg] = await Promise.all([
       ResponseModel.countDocuments(),
-      ResponseModel.aggregate([{
-        $group: {
-          _id: null,
-          totalStale: { $sum: '$staleCount' },
-          avgMs:      { $avg: '$processingMs' },
+      ResponseModel.aggregate([
+        { $unwind: { path: '$claims', preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: null,
+            totalClaims: { $sum: 1 },
+            totalStale: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'stale'] }, 1, 0] } },
+            totalCurrent: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'current'] }, 1, 0] } },
+            totalUnverified: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'unverified'] }, 1, 0] } },
+            avgMs: { $avg: '$processingMs' },
+          },
         },
-      }]),
+      ]),
       ResponseModel.aggregate([
         { $unwind: '$claims' },
-        { $group: { _id: '$claims.category', count: { $sum: 1 }, staleCount: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'stale'] }, 1, 0] } } } },
+        {
+          $group: {
+            _id: '$claims.category',
+            count: { $sum: 1 },
+            staleCount: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'stale'] }, 1, 0] } },
+            currentCount: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'current'] }, 1, 0] } },
+            unverifiedCount: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'unverified'] }, 1, 0] } },
+          },
+        },
       ]),
       // Last 24h hourly buckets
       ResponseModel.aggregate([
         { $match: { checkedAt: { $gte: new Date(Date.now() - 24 * 3_600_000) } } },
-        { $group: {
-          _id: { $dateToString: { format: '%Y-%m-%dT%H:00:00Z', date: '$checkedAt' } },
-          total: { $sum: 1 },
-          stale: { $sum: '$staleCount' },
-          current: { $sum: { $subtract: ['$totalClaims', '$staleCount'] } },
-        } },
+        { $unwind: { path: '$claims', preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%dT%H:00:00Z', date: '$checkedAt' } },
+            total: { $sum: 1 },
+            stale: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'stale'] }, 1, 0] } },
+            current: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'current'] }, 1, 0] } },
+            unverified: { $sum: { $cond: [{ $eq: ['$claims.verdict', 'unverified'] }, 1, 0] } },
+          },
+        },
         { $sort: { _id: 1 } },
       ]),
     ]);
@@ -220,7 +360,10 @@ router.get('/stats', async (req: Request, res: ExpressResponse, next: NextFuncti
 
     res.json({
       totalScanned,
+      totalClaims:      agg[0]?.totalClaims ?? 0,
       totalStale:       agg[0]?.totalStale ?? 0,
+      totalCurrent:     agg[0]?.totalCurrent ?? 0,
+      totalUnverified:  agg[0]?.totalUnverified ?? 0,
       cacheHitRate:     cacheStats.rate,
       cacheHits:        cacheStats.hits,
       cacheMisses:      cacheStats.misses,

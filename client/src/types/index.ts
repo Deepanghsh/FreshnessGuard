@@ -44,15 +44,18 @@ export interface ResponseDoc {
 
 export interface StatsData {
   totalScanned: number;
+  totalClaims?: number;
   totalStale: number;
+  totalCurrent?: number;
+  totalUnverified?: number;
   cacheHitRate: number;
   cacheHits: number;
   cacheMisses: number;
   avgProcessingMs: number;
   p95ProcessingMs: number;
   p99ProcessingMs: number;
-  claimsPerCategory?: Array<{ _id: string; count: number; staleCount: number }>;
-  hourlyHistory?: Array<{ _id: string; total: number; stale: number; current: number }>;
+  claimsPerCategory?: Array<{ _id: string; count: number; staleCount: number; currentCount?: number; unverifiedCount?: number }>;
+  hourlyHistory?: Array<{ _id: string; total: number; stale: number; current: number; unverified?: number }>;
 }
 
 export interface PaginatedResponses {

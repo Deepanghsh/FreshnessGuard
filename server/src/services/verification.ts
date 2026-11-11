@@ -56,29 +56,74 @@ function extractDomain(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
 }
 
-// ─── Verdict extraction from Tavily answer ────────────────────────────────────
-function extractVerdict(answer: string | undefined | null, claim: Claim): { verdict: Verdict; liveValue?: string; correctedText?: string } {
-  if (!answer) return { verdict: 'unverified' };
-  const a = answer.toLowerCase();
-  const v = claim.extractedValue.toLowerCase();
+// ─── Verdict extraction from Tavily answer & source snippets ──────────────────
+function extractVerdict(
+  answer: string | undefined | null,
+  claim: Claim,
+  results: Array<{ title: string; content?: string; url: string }> = []
+): { verdict: Verdict; liveValue?: string; correctedText?: string } {
+  const v = claim.extractedValue.toLowerCase().trim();
 
-  // Direct confirmation
-  if (a.includes(v)) return { verdict: 'current' };
+  // Combine synthesized answer with top search snippets
+  const corpus = [
+    answer ?? '',
+    ...results.slice(0, 3).map(r => `${r.title} ${r.content ?? ''}`),
+  ].join('\n').toLowerCase();
 
-  // Contradiction signals
-  const contradictionSignals = ['changed', 'updated', 'replaced', 'deprecated', 'discontinued', 'now costs', 'currently costs', 'now is', 'currently is', 'latest is', 'is now'];
-  const hasContradiction = contradictionSignals.some(s => a.includes(s));
+  if (!corpus.trim()) return { verdict: 'unverified' };
 
-  if (hasContradiction) {
-    // Try to extract live value
-    const priceMatch   = answer.match(/\$[\d,]+(?:\.\d{2})?/);
-    const versionMatch = answer.match(/v?\d+\.\d+(?:\.\d+)?/);
-    const nameMatch    = answer.match(/(?:is|are|was|became)\s+([A-Z][a-z]+ [A-Z][a-z]+)/);
-    const liveValue    = priceMatch?.[0] ?? versionMatch?.[0] ?? nameMatch?.[1];
-    const correctedText = liveValue
+  // 1. Direct corroboration: check if the exact claim value is affirmed in the corpus
+  const hasClaimValue = corpus.includes(v);
+
+  // 2. Look for clear contradiction patterns associated with this category
+  let liveValue: string | undefined;
+
+  if (claim.category === 'pricing') {
+    // Look for prices mentioned in the evidence
+    const priceMatches = (answer ?? corpus).match(/\$[\d,]+(?:\.\d{1,2})?(?:\s*(?:per|\/)\s*(?:month|year|mo|yr|1m|1k|token|user|seat))?/gi);
+    if (priceMatches && priceMatches.length > 0) {
+      const topPrice = priceMatches[0].trim();
+      if (!topPrice.toLowerCase().includes(v) && !v.includes(topPrice.toLowerCase())) {
+        liveValue = topPrice;
+      }
+    }
+  } else if (claim.category === 'version') {
+    // Look for version numbers in the evidence
+    const verMatches = (answer ?? corpus).match(/\bv?(\d+\.\d+(?:\.\d+)?)\b/g);
+    if (verMatches && verMatches.length > 0) {
+      // Find the most recent/highest version mentioned in relation to the entity
+      const topVer = verMatches[0].trim();
+      if (topVer.toLowerCase() !== v && !v.includes(topVer.toLowerCase())) {
+        liveValue = topVer;
+      }
+    }
+  } else if (claim.category === 'leadership') {
+    const nameMatch = (answer ?? corpus).match(/(?:ceo|chief executive officer|president|led by|appointed)\s+(?:is\s+)?([A-Z][a-z]+ [A-Z][a-z]+)/i);
+    if (nameMatch && nameMatch[1]) {
+      const liveName = nameMatch[1].trim();
+      if (!liveName.toLowerCase().includes(v) && !v.includes(liveName.toLowerCase())) {
+        liveValue = liveName;
+      }
+    }
+  }
+
+  // 3. Evaluate verdict based on evidence comparison
+  if (liveValue) {
+    const correctedText = claim.text && claim.extractedValue
       ? claim.text.replace(claim.extractedValue, liveValue)
       : undefined;
     return { verdict: 'stale', liveValue, correctedText };
+  }
+
+  // If the exact value was verified in live sources and no conflicting value was found:
+  if (hasClaimValue) {
+    return { verdict: 'current' };
+  }
+
+  // If evidence mentions replacement, discontinuation, or invalidation:
+  const explicitInvalidation = /(?:superseded by|deprecated in|no longer supported|invalidated by|repealed|stepped down)/i;
+  if (explicitInvalidation.test(corpus)) {
+    return { verdict: 'stale' };
   }
 
   return { verdict: 'unverified' };
@@ -141,7 +186,7 @@ export async function verifyClaim(claim: Claim): Promise<VerificationResult> {
           return 0;
         });
 
-      const { verdict, liveValue, correctedText } = extractVerdict(result.answer, claim);
+      const { verdict, liveValue, correctedText } = extractVerdict(result.answer, claim, result.results);
       return { claim, verdict, liveValue, sources, answer: result.answer ?? undefined, correctedText };
     } catch (err) {
       clearTimeout(timer);

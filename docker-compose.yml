@@ -31,6 +31,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://bifrost:8080/v1}
       - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - FRESHNESSGUARD_MODE=${FRESHNESSGUARD_MODE:-${STALEGUARD_MODE:-inline}}
       - STALEGUARD_MODE=${STALEGUARD_MODE:-inline}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
       - CORS_ORIGINS=http://localhost:5173,http://localhost:80,http://client:80

@@ -47,18 +47,30 @@ function authorityScore(sources: Source[]): number {
 }
 
 function recencyScore(sources: Source[]): number {
-  if (sources.length === 0) return 0.15;
+  if (sources.length === 0) return 0.20;
   const now = Date.now();
-  const scores = sources
-    .filter(s => !!s.publishedDate)
-    .map(s => {
-      const ageDays = (now - new Date(s.publishedDate!).getTime()) / 86_400_000;
-      if (ageDays <  7) return 1.00;
-      if (ageDays < 30) return 0.75;
-      if (ageDays < 90) return 0.50;
-      return 0.15;
-    });
-  return scores.length > 0 ? Math.max(...scores) : 0.15;
+  const validScores: number[] = [];
+
+  for (const s of sources) {
+    if (!s.publishedDate) continue;
+    const ts = new Date(s.publishedDate).getTime();
+    if (isNaN(ts)) continue;
+    const ageDays = (now - ts) / 86_400_000;
+    // Safely handle future timestamps, missing dates, and recency tiers
+    if (ageDays < 0) {
+      validScores.push(0.30); // Future anomaly: neutral score
+    } else if (ageDays < 7) {
+      validScores.push(1.00);
+    } else if (ageDays < 30) {
+      validScores.push(0.75);
+    } else if (ageDays < 90) {
+      validScores.push(0.50);
+    } else {
+      validScores.push(0.15);
+    }
+  }
+
+  return validScores.length > 0 ? Math.max(...validScores) : 0.20;
 }
 
 export function scoreClaim(result: VerificationResult): number {
@@ -90,9 +102,10 @@ export function scoreResponse(claims: ScoredClaim[]): number {
 export function buildCorrectedAnswer(original: string, claims: ScoredClaim[]): string {
   let corrected = original;
   for (const claim of claims) {
-    if (claim.verdict === 'stale' && claim.liveValue && claim.text) {
-      // Replace the extracted value within the claim's context
-      corrected = corrected.replace(claim.extractedValue, `${claim.liveValue} *(updated)*`);
+    if (claim.verdict === 'stale' && claim.liveValue && claim.extractedValue) {
+      if (corrected.includes(claim.extractedValue)) {
+        corrected = corrected.replace(claim.extractedValue, `${claim.liveValue} [Updated from ${claim.extractedValue}]`);
+      }
     }
   }
   return corrected;

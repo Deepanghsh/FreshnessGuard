@@ -12,7 +12,7 @@
         "service_url": "http://server:3001",
         "timeout_ms": 2000,
         "basic_mode": false,
-        "append_note": true
+        "inject_note": true
       }
     }
   ],

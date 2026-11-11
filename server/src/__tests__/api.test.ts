@@ -50,13 +50,57 @@ jest.mock('mongoose', () => {
   };
 });
 
+const mockResponseInstance = (data: Record<string, any> = {}) => ({
+  ...data,
+  _id: 'mock-id-123',
+  save: jest.fn().mockResolvedValue(undefined),
+  toJSON: jest.fn().mockReturnValue({ ...data, _id: 'mock-id-123' }),
+});
+
+const mockResponseModel = Object.assign(
+  jest.fn().mockImplementation(mockResponseInstance),
+  {
+    find: jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        skip: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([
+              { _id: 'mock-id-123', requestId: 'req-1', originalText: 'test', overallScore: 0.9, staleCount: 0, claims: [] }
+            ]),
+          }),
+        }),
+      }),
+    }),
+    findById: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        _id: 'mock-id-123',
+        requestId: 'req-1',
+        originalText: 'test',
+        overallScore: 0.9,
+        staleCount: 0,
+        claims: [],
+      }),
+    }),
+    findByIdAndUpdate: jest.fn().mockResolvedValue(undefined),
+    countDocuments: jest.fn().mockResolvedValue(1),
+    aggregate: jest.fn().mockImplementation((pipeline: any[]) => {
+      // Return appropriate aggregation results
+      return Promise.resolve([
+        {
+          _id: null,
+          totalClaims: 1,
+          totalStale: 0,
+          totalCurrent: 1,
+          totalUnverified: 0,
+          avgMs: 45,
+        },
+      ]);
+    }),
+  }
+);
+
 jest.mock('../models/Response', () => ({
-  Response: jest.fn().mockImplementation((data: Record<string, any> = {}) => ({
-    ...data,
-    _id: 'mock-id-123',
-    save: jest.fn().mockResolvedValue(undefined),
-    toJSON: jest.fn().mockReturnValue({ ...data, _id: 'mock-id-123' }),
-  })),
+  Response: mockResponseModel,
 }));
 
 // Import after mocks
@@ -95,11 +139,75 @@ describe('API routes', () => {
       expect([200, 201]).toContain(res.status);
     });
 
+    it('handles mode: bypass returning status 200 and mode bypass', async () => {
+      const res = await request(app)
+        .post('/api/check')
+        .send({ text: 'Some text', mode: 'bypass' });
+      expect(res.status).toBe(200);
+      expect(res.body.mode).toBe('bypass');
+      expect(res.body.overallScore).toBe(1.0);
+    });
+
+    it('honors x-bf-eh-freshnessguard-bypass header', async () => {
+      const res = await request(app)
+        .post('/api/check')
+        .set('x-bf-eh-freshnessguard-bypass', 'true')
+        .send({ text: 'Some text' });
+      expect(res.status).toBe(200);
+      expect(res.body.mode).toBe('bypass');
+    });
+
+    it('handles mode: async returning 202 Accepted', async () => {
+      const res = await request(app)
+        .post('/api/check')
+        .send({ text: 'GPT-4 pricing claim', mode: 'async' });
+      expect(res.status).toBe(202);
+      expect(res.body.mode).toBe('async');
+    });
+
+    it('handles mode: basic returning 201 without external verification', async () => {
+      const res = await request(app)
+        .post('/api/check')
+        .send({ text: 'Python 3.11 is the latest version.', mode: 'basic' });
+      expect(res.status).toBe(201);
+      expect(res.body).toHaveProperty('claims');
+      expect(res.body).toHaveProperty('overallScore');
+    });
+
     it('rejects text that is too long with 400', async () => {
       const res = await request(app)
         .post('/api/check')
         .send({ text: 'x'.repeat(70_000) });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /api/stats', () => {
+    it('returns stats payload with counts and cache metrics', async () => {
+      const res = await request(app).get('/api/stats');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('totalScanned');
+      expect(res.body).toHaveProperty('totalClaims');
+      expect(res.body).toHaveProperty('totalStale');
+      expect(res.body).toHaveProperty('cacheHitRate');
+    });
+  });
+
+  describe('GET /api/responses', () => {
+    it('returns paginated responses list', async () => {
+      const res = await request(app).get('/api/responses');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('data');
+      expect(res.body).toHaveProperty('total');
+      expect(res.body).toHaveProperty('page');
+    });
+  });
+
+  describe('GET /api/responses/:id', () => {
+    it('returns single response document', async () => {
+      const res = await request(app).get('/api/responses/mock-id-123');
+      expect(res.status).toBe(200);
+      expect(res.body._id).toBe('mock-id-123');
     });
   });
 });

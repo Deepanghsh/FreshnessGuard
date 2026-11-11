@@ -373,3 +373,113 @@ func TestInitPlugin(t *testing.T) {
 	}
 }
 
+// ─── Standard Init(config any) error test ─────────────────
+
+func TestInit_StandardSignature(t *testing.T) {
+	cfg := map[string]interface{}{
+		"service_url": "http://localhost:3001",
+		"timeout_ms":  float64(2500),
+		"basic_mode":  true,
+	}
+	if err := Init(cfg); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	if GetName() != "freshnessguard" {
+		t.Errorf("GetName() = %q; want 'freshnessguard'", GetName())
+	}
+	if err := Cleanup(); err != nil {
+		t.Errorf("Cleanup() = %v; want nil", err)
+	}
+}
+
+// ─── Recursion bypass tests ───────────────────────────────
+
+func TestBypass_ContextHandling(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+
+	// Nil context -> no bypass
+	if p.isBypass(nil) {
+		t.Error("isBypass(nil) should be false")
+	}
+
+	// Empty extra -> no bypass
+	ctxEmpty := &BifrostContext{Extra: map[string]interface{}{}}
+	if p.isBypass(ctxEmpty) {
+		t.Error("isBypass(empty) should be false")
+	}
+
+	// Direct bypass key
+	ctxBypass := &BifrostContext{
+		Extra: map[string]interface{}{
+			"freshnessguard-bypass": "true",
+		},
+	}
+	if !p.isBypass(ctxBypass) {
+		t.Error("isBypass with 'freshnessguard-bypass' should be true")
+	}
+
+	// Bifrost x-bf-eh header key
+	ctxBfEh := &BifrostContext{
+		Extra: map[string]interface{}{
+			"x-bf-eh-freshnessguard-bypass": "true",
+		},
+	}
+	if !p.isBypass(ctxBfEh) {
+		t.Error("isBypass with 'x-bf-eh-freshnessguard-bypass' should be true")
+	}
+}
+
+func TestPostLLMHook_BypassSkipsService(t *testing.T) {
+	serverCalled := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	p := testPlugin(false, ts.URL, 2000)
+	resp := makeResponse("GPT-4 costs $0.03 per 1K tokens")
+	ctx := &BifrostContext{
+		Extra: map[string]interface{}{
+			"x-bf-eh-freshnessguard-bypass": "true",
+		},
+	}
+
+	got, _, err := p.PostLLMHook(ctx, resp, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if serverCalled {
+		t.Error("expected server NOT to be called when bypass header is set")
+	}
+	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("expected mode 'bypass', got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	}
+}
+
+// ─── Streaming choices pass-through ───────────────────────
+
+func TestPostLLMHook_StreamingGraceful(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+	streamingResp := &BifrostResponse{
+		Provider: "openai",
+		ChatResponse: &BifrostChatResponse{
+			Model: "gpt-4o",
+			Choices: []BifrostResponseChoice{
+				{
+					Index:                       0,
+					ChatNonStreamResponseChoice: nil, // streaming chunk has no message
+				},
+			},
+		},
+	}
+
+	got, _, err := p.PostLLMHook(nil, streamingResp, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("response should not be nil")
+	}
+}
+

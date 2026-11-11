@@ -58,7 +58,15 @@ export async function extractClaims(text: string): Promise<ExtractionResult> {
   }
 
   try {
-    const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+    // Pass Bifrost extra header prefix (x-bf-eh-) so Bifrost maps freshnessguard-bypass into request context
+    const client = new OpenAI({
+      apiKey,
+      ...(baseURL ? { baseURL } : {}),
+      defaultHeaders: {
+        'x-bf-eh-freshnessguard-bypass': 'true',
+        'x-freshnessguard-bypass': 'true',
+      },
+    });
     const completion = await client.chat.completions.create({
       model,
       messages: [
