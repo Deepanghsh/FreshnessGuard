@@ -1,457 +1,431 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { api } from '../api/client';
-import type { ResponseDoc } from '../types';
+import { useSSE } from '../hooks/useSSE';
+import { useClipboard } from '../hooks/useClipboard';
+import type { ResponseDoc, Mode, SSEEvent } from '../types';
 import ScoreRing from '../components/ScoreRing';
 import ClaimBadge from '../components/ClaimBadge';
+import SummaryBadge from '../components/SummaryBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
+import {
+  ExternalLink, Copy, Check, Play, RefreshCw, AlertCircle,
+  HelpCircle, ShieldCheck, Zap, Radio
+} from 'lucide-react';
 
-// ── Pipeline step animation ──────────────────────────────────────────────────
-const PIPELINE_STEPS = [
-  { id: 'extract',  label: 'Extract',  icon: '🔍', durationMs: 500 },
-  { id: 'triage',   label: 'Triage',   icon: '⚖️',  durationMs: 150 },
-  { id: 'cache',    label: 'Cache',    icon: '💾',  durationMs: 80  },
-  { id: 'tavily',   label: 'Tavily',   icon: '🌐',  durationMs: 2500 },
-  { id: 'score',    label: 'Score',    icon: '📊',  durationMs: 150 },
-];
-
-type StepState = 'idle' | 'active' | 'done' | 'error';
-type PipelineState = Record<string, StepState>;
-
-// ── Annotated text with inline claim highlights ──────────────────────────────
-function AnnotatedText({ text, claims }: { text: string; claims: ResponseDoc['claims'] }) {
-  if (!claims || claims.length === 0) return <p className="playground-raw-text">{text}</p>;
-
-  const parts: { text: string; claimIdx?: number }[] = [];
-  let remaining = text;
-  const sorted = [...claims].sort((a, b) =>
-    remaining.indexOf(a.text) - remaining.indexOf(b.text)
-  );
-
-  for (const [i, claim] of sorted.entries()) {
-    const idx = remaining.indexOf(claim.text);
-    if (idx === -1) continue;
-    if (idx > 0) parts.push({ text: remaining.slice(0, idx) });
-    parts.push({ text: claim.text, claimIdx: i });
-    remaining = remaining.slice(idx + claim.text.length);
-  }
-  if (remaining) parts.push({ text: remaining });
-
-  return (
-    <p className="playground-raw-text">
-      {parts.map((p, i) =>
-        p.claimIdx !== undefined ? (
-          <mark
-            key={i}
-            className={`claim-highlight claim-highlight--${claims[p.claimIdx].verdict}`}
-            title={claims[p.claimIdx].verdict}
-          >
-            {p.text}
-            <sup className={`verdict-sup verdict-sup--${claims[p.claimIdx].verdict}`}>
-              {p.claimIdx + 1}
-            </sup>
-          </mark>
-        ) : (
-          <span key={i}>{p.text}</span>
-        )
-      )}
-    </p>
-  );
-}
-
-// ── Evidence card per claim ──────────────────────────────────────────────────
-function EvidenceCard({ claim, index }: { claim: ResponseDoc['claims'][0]; index: number }) {
-  const isStale = claim.verdict === 'stale';
-  const isCurrent = claim.verdict === 'current';
-
-  return (
-    <div className={`evidence-card evidence-card--${claim.verdict}`}>
-      <div className="evidence-card__header">
-        <span className="evidence-card__num">{index + 1}</span>
-        <span className={`verdict-badge verdict-badge--${claim.verdict}`}>
-          {isStale ? '⚠️ Stale' : isCurrent ? '✅ Current' : '❓ Unverified'}
-        </span>
-        <span className="evidence-card__category">{claim.category}</span>
-        <ScoreRing score={claim.score ?? 0} size={40} />
-      </div>
-
-      <div className="evidence-card__claim">
-        {isStale ? (
-          <>
-            <span className="evidence-card__stale-text">{claim.text}</span>
-            {claim.liveValue && (
-              <span className="evidence-card__live-value">→ {claim.liveValue}</span>
-            )}
-          </>
-        ) : (
-          <span>{claim.text}</span>
-        )}
-      </div>
-
-      {claim.sources && claim.sources.length > 0 && (
-        <div className="evidence-card__sources">
-          {claim.sources.slice(0, 2).map((src, i) => (
-            <a key={i} href={src.url} target="_blank" rel="noopener noreferrer" className="source-link">
-              🔗 {src.title || new URL(src.url).hostname}
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Demo prompts ─────────────────────────────────────────────────────────────
+// ── Demo prompts with actual factual verification test cases ─────────────────
 const DEMO_PROMPTS = [
   {
-    label: '💰 GPT-4 Pricing',
-    text: 'GPT-4 costs $0.03 per 1K input tokens and $0.06 per 1K output tokens. It was released in March 2023.',
+    label: '💰 GPT-4 Pricing (Stale vs Live)',
+    text: 'GPT-4 API pricing is $0.03 per 1K input tokens and $0.06 per 1K output tokens. It was released in March 2023.',
   },
   {
-    label: '📦 React Version',
+    label: '📦 React Version (Stale 18.2 vs 19)',
     text: 'The latest stable version of React is 18.2.0, released in June 2022. React hooks were introduced in 16.8.',
   },
   {
-    label: '👔 Tesla CEO',
-    text: 'Elon Musk is the CEO of Tesla and SpaceX. Tesla was founded in 2003 and went public in 2010.',
+    label: '👔 Twitter / X CEO (Stale vs Live)',
+    text: 'Elon Musk is the current CEO of Twitter (now X). The company was founded in 2006.',
   },
   {
-    label: '⚖️ GDPR Fine',
+    label: '⚖️ GDPR Fine (Current Law)',
     text: 'Under GDPR, the maximum fine is €20 million or 4% of annual global turnover, whichever is higher.',
+  },
+  {
+    label: '✅ Fully Fresh Fact',
+    text: 'Python 3.12 was released in October 2023. Python was created by Guido van Rossum in 1991.',
   },
 ];
 
-// ── Main Playground page ─────────────────────────────────────────────────────
+const MODES: Array<{ id: Mode; label: string; desc: string }> = [
+  { id: 'inline',  label: 'Inline',  desc: 'Blocks until claims are verified via Tavily (default gateway behavior)' },
+  { id: 'async',   label: 'Async',   desc: 'Returns 202 immediately; verification streams live via SSE' },
+  { id: 'basic',   label: 'Basic',   desc: 'Fast local heuristic & regex scoring (zero external network calls)' },
+  { id: 'bypass',  label: 'Bypass',  desc: 'Completely skips FreshnessGuard processing (score 1.0)' },
+];
+
 export default function Playground() {
   const [inputText, setInputText]     = useState('');
   const [model, setModel]             = useState('gpt-4o-mini');
+  const [mode, setMode]               = useState<Mode>('inline');
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [result, setResult]           = useState<ResponseDoc | null>(null);
-  const [pipeline, setPipeline]       = useState<PipelineState>({});
-  const [activeStep, setActiveStep]   = useState<string | null>(null);
-  const abortRef                      = useRef<AbortController | null>(null);
+  const [isAsyncWaiting, setIsAsyncWaiting] = useState(false);
+  const { copied, copy }              = useClipboard();
 
-  // Animate pipeline steps while the real request runs
-  const animatePipeline = useCallback(() => {
-    const initial: PipelineState = {};
-    for (const s of PIPELINE_STEPS) initial[s.id] = 'idle';
-    setPipeline(initial);
-
-    let offset = 0;
-    for (const step of PIPELINE_STEPS) {
-      const stepId = step.id;
-      const delay  = offset;
-      setTimeout(() => {
-        setActiveStep(stepId);
-        setPipeline(prev => ({ ...prev, [stepId]: 'active' }));
-      }, delay);
-      setTimeout(() => {
-        setPipeline(prev => ({ ...prev, [stepId]: 'done' }));
-      }, delay + step.durationMs);
-      offset += step.durationMs;
+  // Listen to SSE updates for async verification completion
+  const { connected } = useSSE(useCallback((event: SSEEvent) => {
+    if (event.type === 'response_updated' && result) {
+      if (event._id === result._id || event.requestId === result.requestId) {
+        setIsAsyncWaiting(false);
+        // Refresh this document from backend
+        api.getResponse(result._id).then(updated => {
+          setResult(updated);
+        }).catch(() => {});
+      }
     }
-  }, []);
+  }, [result]));
 
   const handleCheck = useCallback(async () => {
     if (!inputText.trim()) return;
     setError(null);
     setResult(null);
     setLoading(true);
-    animatePipeline();
+    setIsAsyncWaiting(false);
 
-    abortRef.current = new AbortController();
     try {
-      const data = await api.postCheck(inputText.trim(), model);
+      const data = await api.postCheck(inputText.trim(), model, mode);
       setResult(data);
+      if (mode === 'async') {
+        setIsAsyncWaiting(true);
+      }
     } catch (e: unknown) {
-      if (e instanceof Error && e.name !== 'AbortError') {
+      if (e instanceof Error) {
         setError(e.message || 'Something went wrong');
+      } else {
+        setError('An unexpected error occurred');
       }
     } finally {
       setLoading(false);
-      setActiveStep(null);
     }
-  }, [inputText, model, animatePipeline]);
+  }, [inputText, model, mode]);
 
-  const handleDemo = (prompt: string) => {
-    setInputText(prompt);
+  const handleDemo = (promptText: string) => {
+    setInputText(promptText);
     setResult(null);
     setError(null);
-    setPipeline({});
+    setIsAsyncWaiting(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleCheck();
   };
 
-  const staleClaims    = result?.claims.filter(c => c.verdict === 'stale')    ?? [];
-  const currentClaims  = result?.claims.filter(c => c.verdict === 'current')  ?? [];
+  const staleClaims      = result?.claims.filter(c => c.verdict === 'stale')      ?? [];
+  const currentClaims    = result?.claims.filter(c => c.verdict === 'current')    ?? [];
   const unverifiedClaims = result?.claims.filter(c => c.verdict === 'unverified') ?? [];
 
   return (
-    <div className="playground-page">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 1200 }} className="animate-fade-in">
       {/* ── Header ── */}
-      <header className="page-header">
-        <div>
-          <h1 className="page-title">Playground</h1>
-          <p className="page-subtitle">
-            Paste any LLM response and watch FreshnessGuard check every claim live.
-          </p>
-        </div>
-      </header>
+      <div>
+        <h1 style={{ marginBottom: 4 }}>Playground</h1>
+        <p style={{ fontSize: '0.875rem', color: 'var(--muted)', margin: 0 }}>
+          Test any AI response across Inline, Async, Basic, and Bypass modes with live Tavily verification.
+        </p>
+      </div>
 
-      {/* ── Demo prompts ── */}
-      <section className="demo-prompts">
-        <span className="demo-prompts__label">Try a demo:</span>
+      {/* ── Demo Prompts ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          Load Test Prompt:
+        </span>
         {DEMO_PROMPTS.map(d => (
-          <button key={d.label} className="btn btn--ghost btn--sm" onClick={() => handleDemo(d.text)}>
+          <button
+            key={d.label}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+            onClick={() => handleDemo(d.text)}
+          >
             {d.label}
           </button>
         ))}
-      </section>
+      </div>
 
-      {/* ── Input + Controls ── */}
-      <div className="playground-input-row">
-        <div className="playground-textarea-wrap">
-          <label htmlFor="pg-input" className="sr-only">LLM response text</label>
+      {/* ── Main Input & Controls Panel ── */}
+      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+          {/* Mode Selector */}
+          <div>
+            <label htmlFor="pg-mode" style={{ fontWeight: 600 }}>Verification Mode</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 6, marginTop: 4 }}>
+              {MODES.map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setMode(m.id)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    border: `1px solid ${mode === m.id ? 'var(--accent)' : 'var(--border)'}`,
+                    background: mode === m.id ? 'var(--accent-dim)' : 'transparent',
+                    color: mode === m.id ? 'var(--accent)' : 'var(--muted)',
+                    textAlign: 'left',
+                    fontSize: '0.8125rem',
+                    fontWeight: mode === m.id ? 700 : 500,
+                  }}
+                  title={m.desc}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>{m.label}</span>
+                    {mode === m.id && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 6, marginBottom: 0 }}>
+              {MODES.find(m => m.id === mode)?.desc}
+            </p>
+          </div>
+
+          {/* Model Selector */}
+          <div>
+            <label htmlFor="pg-model" style={{ fontWeight: 600 }}>Model Attribution</label>
+            <select
+              id="pg-model"
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              disabled={loading}
+              style={{ marginTop: 4 }}
+            >
+              <option value="gpt-4o-mini">gpt-4o-mini (OpenAI)</option>
+              <option value="gpt-4o">gpt-4o (OpenAI)</option>
+              <option value="claude-3-5-sonnet">claude-3-5-sonnet (Anthropic)</option>
+              <option value="gemini-1.5-pro">gemini-1.5-pro (Google)</option>
+              <option value="llama-3.1-70b">llama-3.1-70b (Meta)</option>
+            </select>
+            <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 6, marginBottom: 0 }}>
+              Simulates model tag passed by Bifrost Gateway request context.
+            </p>
+          </div>
+        </div>
+
+        {/* Text Area */}
+        <div>
+          <label htmlFor="pg-input" style={{ fontWeight: 600 }}>AI Response Text to Verify</label>
           <textarea
             id="pg-input"
-            className="playground-textarea"
-            rows={8}
-            placeholder="Paste any LLM response here… e.g. &quot;GPT-4 costs $0.03 per 1K tokens…&quot;"
+            rows={5}
+            placeholder="Paste any AI-generated response containing prices, versions, leadership, dates, or factual claims…"
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={loading}
+            style={{ width: '100%', resize: 'vertical', marginTop: 4 }}
           />
-          <span className="playground-textarea__hint">Ctrl+Enter to run</span>
-        </div>
-
-        <div className="playground-controls">
-          <label htmlFor="pg-model" className="form-label">Model</label>
-          <select
-            id="pg-model"
-            className="form-select"
-            value={model}
-            onChange={e => setModel(e.target.value)}
-            disabled={loading}
-          >
-            <option value="gpt-4o-mini">GPT-4o mini</option>
-            <option value="gpt-4o">GPT-4o</option>
-            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-            <option value="claude-3-haiku">Claude 3 Haiku</option>
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-          </select>
-
-          <button
-            className="btn btn--primary btn--lg playground-run-btn"
-            onClick={handleCheck}
-            disabled={loading || !inputText.trim()}
-          >
-            {loading ? (
-              <><LoadingSpinner size={16} /> Checking…</>
-            ) : (
-              <>🛡️ Check Freshness</>
-            )}
-          </button>
-
-          {result && (
-            <div className="playground-score-summary">
-              <ScoreRing score={result.overallScore} size={72} />
-              <div>
-                <div className="score-summary__label">Overall Score</div>
-                <div className="score-summary__detail">
-                  <span style={{ color: 'var(--stale)' }}>{staleClaims.length} stale</span>
-                  {' · '}
-                  <span style={{ color: 'var(--current)' }}>{currentClaims.length} current</span>
-                  {' · '}
-                  <span style={{ color: 'var(--unverified)' }}>{unverifiedClaims.length} unverified</span>
-                </div>
-              </div>
-            </div>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+              Tip: Press <kbd style={{ background: 'var(--border)', padding: '1px 5px', borderRadius: 3 }}>Ctrl</kbd> + <kbd style={{ background: 'var(--border)', padding: '1px 5px', borderRadius: 3 }}>Enter</kbd> to run
+            </span>
+            <button
+              className="btn btn-primary"
+              onClick={handleCheck}
+              disabled={loading || !inputText.trim()}
+              style={{ padding: '8px 20px', fontSize: '0.9375rem' }}
+            >
+              {loading ? (
+                <><LoadingSpinner size={16} /> Verifying…</>
+              ) : (
+                <><Play size={15} fill="currentColor" /> Check Freshness</>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* ── Pipeline animation ── */}
-      {Object.keys(pipeline).length > 0 && (
-        <div className="pipeline-track">
-          {PIPELINE_STEPS.map((step, i) => (
-            <React.Fragment key={step.id}>
-              <div className={`pipeline-step pipeline-step--${pipeline[step.id] ?? 'idle'}`}>
-                <span className="pipeline-step__icon">{step.icon}</span>
-                <span className="pipeline-step__label">{step.label}</span>
-                {pipeline[step.id] === 'active' && <span className="pipeline-step__spinner" />}
-                {pipeline[step.id] === 'done'   && <span className="pipeline-step__check">✓</span>}
-              </div>
-              {i < PIPELINE_STEPS.length - 1 && (
-                <div className={`pipeline-connector ${
-                  pipeline[PIPELINE_STEPS[i + 1].id] !== 'idle' ? 'pipeline-connector--lit' : ''
-                }`} />
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
-
-      {/* ── Error ── */}
+      {/* ── Error Banner ── */}
       {error && (
-        <div className="alert alert--error" role="alert">
-          <span>⚠️</span>
-          <div>
-            <strong>Check failed</strong>
-            <p>{error}</p>
-          </div>
+        <div
+          style={{
+            background: 'var(--stale-dim)',
+            border: '1px solid var(--stale)',
+            borderRadius: 6,
+            padding: '12px 16px',
+            color: 'var(--text)',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+          role="alert"
+        >
+          <AlertCircle size={18} color="var(--stale)" />
+          <span><strong>Verification Error:</strong> {error}</span>
         </div>
       )}
 
-      {/* ── Results: two-panel layout ── */}
-      {result && (
-        <div className="playground-results">
-          {/* Left: Raw + annotated */}
-          <div className="playground-panel">
-            <div className="panel-header">
-              <span>Raw Answer</span>
-              <span className="badge badge--muted">{result.claims.length} claims found</span>
-            </div>
-            <div className="panel-body">
-              <AnnotatedText text={result.originalText} claims={result.claims} />
-            </div>
+      {/* ── Async Waiting Banner ── */}
+      {isAsyncWaiting && (
+        <div
+          style={{
+            background: 'rgba(251, 191, 36, 0.1)',
+            border: '1px solid var(--unverified)',
+            borderRadius: 6,
+            padding: '12px 16px',
+            color: 'var(--text)',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Radio size={16} color="var(--unverified)" style={{ animation: 'pulse 1.5s infinite' }} />
+            <span>
+              <strong>Async Mode Active:</strong> Response accepted (HTTP 202). Background verification is streaming results via SSE...
+            </span>
           </div>
+          <span className="badge badge-unverified">Processing</span>
+        </div>
+      )}
 
-          {/* Right: Corrected answer */}
-          <div className="playground-panel">
-            <div className="panel-header">
-              <span>✅ Checked Answer</span>
-              {result.staleCount > 0 && (
-                <span className="badge badge--stale">Contains stale claims</span>
+      {/* ── Results View ── */}
+      {result && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }} className="animate-fade-in">
+
+          {/* Results Summary Bar */}
+          <div className="panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <ScoreRing score={result.overallScore} size={70} strokeWidth={5.5} />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <h2 style={{ fontSize: '1.25rem', margin: 0 }}>
+                    {Math.round(result.overallScore * 100)}% Freshness Score
+                  </h2>
+                  <SummaryBadge
+                    status={result.summaryStatus ?? (result.totalClaims === 0 ? 'no_claims' : result.staleCount > 0 ? 'stale_detected' : 'all_fresh')}
+                    message={result.summaryMessage}
+                  />
+                </div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--muted)' }}>
+                  {result.totalClaims === 0 ? (
+                    'No claims requiring verification were extracted from this response.'
+                  ) : (
+                    <span>
+                      Detected <strong>{result.totalClaims}</strong> time-sensitive claim{result.totalClaims > 1 ? 's' : ''} (
+                      <span style={{ color: 'var(--stale)' }}>{staleClaims.length} stale</span>,{' '}
+                      <span style={{ color: 'var(--current)' }}>{currentClaims.length} current</span>,{' '}
+                      <span style={{ color: 'var(--unverified)' }}>{unverifiedClaims.length} unverified</span>)
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              {result.overallConfidence !== undefined && (
+                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.625rem', color: 'var(--muted)', textTransform: 'uppercase' }}>Confidence</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                    {(result.overallConfidence * 100).toFixed(0)}%
+                  </div>
+                </div>
               )}
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.625rem', color: 'var(--muted)', textTransform: 'uppercase' }}>Latency</div>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                  {result.processingMs}ms
+                </div>
+              </div>
             </div>
-            <div className="panel-body">
-              <AnnotatedText text={result.correctedAnswer || result.originalText} claims={result.claims} />
+          </div>
+
+          {/* Corrected Answer Box (if stale claims exist) */}
+          {result.correctedAnswer && (
+            <div className="panel" style={{ borderLeft: '3px solid var(--current)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <h3 style={{ fontSize: '0.9375rem', color: 'var(--current)', margin: 0 }}>
+                  🛡️ Live Corrected AI Response
+                </h3>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => copy(result.correctedAnswer!)}
+                  style={{ padding: '3px 8px', fontSize: '0.75rem' }}
+                >
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: '0.9375rem' }}>
+                {result.correctedAnswer}
+              </p>
             </div>
+          )}
+
+          {/* Extracted Claims Evidence List */}
+          <div>
+            <h3 style={{ fontSize: '1rem', marginBottom: 12 }}>
+              Extracted Claims &amp; Evidence ({result.claims.length})
+            </h3>
+            {result.claims.length === 0 ? (
+              <div className="panel" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--muted)' }}>
+                No time-sensitive claims extracted.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {result.claims.map((claim, idx) => (
+                  <div
+                    key={claim.id || idx}
+                    className="panel panel-sm"
+                    style={{
+                      borderLeft: `3px solid ${
+                        claim.verdict === 'current'
+                          ? 'var(--current)'
+                          : claim.verdict === 'stale'
+                          ? 'var(--stale)'
+                          : 'var(--unverified)'
+                      }`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="badge badge-muted">{claim.category}</span>
+                        <ClaimBadge verdict={claim.verdict ?? 'unverified'} />
+                        <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{claim.text}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {claim.confidence !== undefined && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                            conf: <strong style={{ color: 'var(--accent)' }}>{(claim.confidence * 100).toFixed(0)}%</strong>
+                          </span>
+                        )}
+                        {claim.score !== undefined && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                            freshness: <strong>{(claim.score * 100).toFixed(0)}%</strong>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stale Replacement */}
+                    {claim.verdict === 'stale' && claim.liveValue && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--muted)' }}>Stale Value:</span>
+                        <s style={{ color: 'var(--stale)' }}>{claim.extractedValue}</s>
+                        <span>→</span>
+                        <strong style={{ color: 'var(--current)' }}>{claim.liveValue}</strong>
+                      </div>
+                    )}
+
+                    {/* Sources */}
+                    {claim.sources && claim.sources.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                        {claim.sources.map((s, sIdx) => (
+                          <div key={sIdx} style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                            <a
+                              href={s.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}
+                            >
+                              🔗 {s.title || s.domain || s.url}
+                            </a>
+                            {s.publishedDate && <span style={{ marginLeft: 6 }}>({new Date(s.publishedDate).toLocaleDateString()})</span>}
+                            {s.content && <p style={{ margin: '2px 0 0', fontStyle: 'italic', color: 'var(--dim)' }}>"{s.content}"</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
-
-      {/* ── Evidence cards ── */}
-      {result && result.claims.length > 0 && (
-        <section className="evidence-section">
-          <h2 className="section-title">
-            Claim Evidence
-            <span className="badge badge--muted">{result.claims.length} claims</span>
-          </h2>
-          <div className="evidence-grid">
-            {result.claims.map((claim, i) => (
-              <EvidenceCard key={i} claim={claim} index={i} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ── Claim type legend ── */}
-      {result && (
-        <div className="playground-legend">
-          <div className="legend-item">
-            <span className="legend-dot legend-dot--stale" />
-            <span>Stale</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-dot legend-dot--current" />
-            <span>Current</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-dot legend-dot--unverified" />
-            <span>Unverified</span>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        .playground-page { display: flex; flex-direction: column; gap: 1.5rem; padding: 1.5rem; max-width: 1400px; margin: 0 auto; }
-        .page-header { display: flex; justify-content: space-between; align-items: flex-start; }
-        .page-title { font-size: 1.75rem; font-weight: 700; color: var(--text); margin: 0 0 0.25rem; }
-        .page-subtitle { color: var(--muted); margin: 0; }
-        .demo-prompts { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-        .demo-prompts__label { color: var(--muted); font-size: 0.85rem; }
-        .btn--sm { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
-        .btn--ghost { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 6px; cursor: pointer; transition: all 0.15s; }
-        .btn--ghost:hover { border-color: var(--accent); color: var(--accent); }
-        .playground-input-row { display: grid; grid-template-columns: 1fr 220px; gap: 1rem; align-items: start; }
-        .playground-textarea-wrap { position: relative; }
-        .playground-textarea { width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--font-mono); font-size: 0.875rem; padding: 0.875rem; resize: vertical; min-height: 180px; outline: none; transition: border-color 0.15s; box-sizing: border-box; }
-        .playground-textarea:focus { border-color: var(--accent); }
-        .playground-textarea:disabled { opacity: 0.6; }
-        .playground-textarea__hint { position: absolute; bottom: 0.5rem; right: 0.75rem; font-size: 0.7rem; color: var(--muted); pointer-events: none; }
-        .playground-controls { display: flex; flex-direction: column; gap: 0.75rem; }
-        .form-label { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
-        .form-select { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 0.5rem 0.75rem; font-size: 0.875rem; width: 100%; outline: none; cursor: pointer; }
-        .form-select:focus { border-color: var(--accent); }
-        .btn--lg { padding: 0.75rem 1.25rem; font-size: 1rem; }
-        .playground-run-btn { display: flex; align-items: center; gap: 0.5rem; justify-content: center; }
-        .playground-score-summary { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
-        .score-summary__label { font-size: 0.75rem; color: var(--muted); }
-        .score-summary__detail { font-size: 0.8rem; }
-        .pipeline-track { display: flex; align-items: center; gap: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.5rem; overflow-x: auto; }
-        .pipeline-step { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; min-width: 70px; position: relative; transition: all 0.3s; }
-        .pipeline-step__icon { font-size: 1.25rem; }
-        .pipeline-step__label { font-size: 0.7rem; color: var(--muted); font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
-        .pipeline-step--active .pipeline-step__icon { filter: drop-shadow(0 0 6px var(--accent)); }
-        .pipeline-step--active .pipeline-step__label { color: var(--accent); }
-        .pipeline-step--done .pipeline-step__label { color: var(--current); }
-        .pipeline-step__check { position: absolute; top: -6px; right: 4px; font-size: 0.65rem; color: var(--current); }
-        .pipeline-step__spinner { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 0.8s ease-in-out infinite; }
-        .pipeline-connector { flex: 1; height: 2px; background: var(--border); min-width: 20px; transition: background 0.3s; }
-        .pipeline-connector--lit { background: var(--accent); }
-        .alert { display: flex; gap: 0.75rem; align-items: flex-start; padding: 1rem; border-radius: 8px; }
-        .alert--error { background: rgba(255, 107, 107, 0.1); border: 1px solid var(--stale); color: var(--stale); }
-        .playground-results { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        .playground-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-        .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-        .panel-body { padding: 1rem; max-height: 400px; overflow-y: auto; }
-        .playground-raw-text { margin: 0; line-height: 1.7; color: var(--text); font-size: 0.9rem; white-space: pre-wrap; word-break: break-word; }
-        .claim-highlight { border-radius: 3px; padding: 0 2px; cursor: help; }
-        .claim-highlight--stale { background: rgba(255, 107, 107, 0.2); border-bottom: 2px solid var(--stale); }
-        .claim-highlight--current { background: rgba(74, 222, 128, 0.15); border-bottom: 2px solid var(--current); }
-        .claim-highlight--unverified { background: rgba(251, 191, 36, 0.15); border-bottom: 2px solid var(--unverified); }
-        .verdict-sup { font-size: 0.6rem; vertical-align: super; margin-left: 1px; font-weight: 700; }
-        .verdict-sup--stale { color: var(--stale); }
-        .verdict-sup--current { color: var(--current); }
-        .verdict-sup--unverified { color: var(--unverified); }
-        .evidence-section { display: flex; flex-direction: column; gap: 1rem; }
-        .section-title { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.75rem; margin: 0; }
-        .evidence-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 0.75rem; }
-        .evidence-card { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
-        .evidence-card--stale { border-color: rgba(255, 107, 107, 0.4); }
-        .evidence-card--current { border-color: rgba(74, 222, 128, 0.3); }
-        .evidence-card--unverified { border-color: rgba(251, 191, 36, 0.3); }
-        .evidence-card__header { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--panel); border-bottom: 1px solid var(--border); }
-        .evidence-card__num { width: 20px; height: 20px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; flex-shrink: 0; }
-        .evidence-card__category { margin-left: auto; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-        .evidence-card__claim { padding: 0.75rem 1rem; font-size: 0.875rem; line-height: 1.5; }
-        .evidence-card__stale-text { text-decoration: line-through; color: var(--stale); opacity: 0.8; }
-        .evidence-card__live-value { margin-left: 0.5rem; color: var(--current); font-weight: 600; }
-        .evidence-card__sources { padding: 0 1rem 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; }
-        .source-link { font-size: 0.75rem; color: var(--accent); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-        .source-link:hover { text-decoration: underline; }
-        .verdict-badge { font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 999px; }
-        .verdict-badge--stale { background: rgba(255, 107, 107, 0.2); color: var(--stale); }
-        .verdict-badge--current { background: rgba(74, 222, 128, 0.15); color: var(--current); }
-        .verdict-badge--unverified { background: rgba(251, 191, 36, 0.15); color: var(--unverified); }
-        .playground-legend { display: flex; gap: 1.5rem; align-items: center; padding: 0.5rem 0; }
-        .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); }
-        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
-        .legend-dot--stale { background: var(--stale); }
-        .legend-dot--current { background: var(--current); }
-        .legend-dot--unverified { background: var(--unverified); }
-        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
-        @media (max-width: 900px) {
-          .playground-input-row { grid-template-columns: 1fr; }
-          .playground-results { grid-template-columns: 1fr; }
-        }
-        @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
-      `}</style>
     </div>
   );
 }
-

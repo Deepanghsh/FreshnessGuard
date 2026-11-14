@@ -5,8 +5,9 @@ services:
     image: mongo:7.0
     container_name: freshnessguard-mongodb
     restart: unless-stopped
-    ports:
-      - "27017:27017"
+    # Internal to Docker network only (unnecessary host port exposure avoided)
+    expose:
+      - "27017"
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -16,23 +17,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
 
   server:
     build:
       context: ./server
       dockerfile: Dockerfile
+    image: freshnessguard-server:1.0.0
     container_name: freshnessguard-server
     restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
       - PORT=3001
+      - NODE_ENV=production
       - MONGODB_URI=mongodb://mongodb:27017/freshnessguard
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://bifrost:8080/v1}
       - TAVILY_API_KEY=${TAVILY_API_KEY}
-      - FRESHNESSGUARD_MODE=${FRESHNESSGUARD_MODE:-${STALEGUARD_MODE:-inline}}
-      - STALEGUARD_MODE=${STALEGUARD_MODE:-inline}
+      - FRESHNESSGUARD_MODE=${FRESHNESSGUARD_MODE:-inline}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
       - CORS_ORIGINS=http://localhost:5173,http://localhost:80,http://client:80
       - RATE_LIMIT_WINDOW_MS=60000
@@ -40,6 +43,12 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - freshnessguard-net
 
@@ -47,17 +56,25 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
+    image: freshnessguard-client:1.0.0
     container_name: freshnessguard-client
     restart: unless-stopped
     ports:
       - "5173:80"
     depends_on:
-      - server
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - freshnessguard-net
 
   bifrost:
-    image: ghcr.io/maximhq/bifrost:latest
+    image: maximhq/bifrost:v2.5.1
     container_name: freshnessguard-bifrost
     restart: unless-stopped
     ports:
@@ -68,13 +85,30 @@ services:
     environment:
       - BIFROST_CONFIG_PATH=/app/config/config.json
       - BIFROST_ENCRYPTION_KEY=${BIFROST_ENCRYPTION_KEY:-freshnessguardsecretkey1234567890}
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - freshnessguard-net
+
+  # Optional profile for building the Linux .so plugin in an identical Go 1.27 container
+  plugin-builder:
+    build:
+      context: ./plugins/freshnessguard
+      dockerfile: Dockerfile
+    container_name: freshnessguard-plugin-builder
+    volumes:
+      - ./plugins:/plugins
+    profiles:
+      - build-plugin
     networks:
       - freshnessguard-net
 
 networks:
   freshnessguard-net:
+    name: freshnessguard-net
     driver: bridge
 
 volumes:
   mongodb_data:
-
+    name: freshnessguard_mongodb_data

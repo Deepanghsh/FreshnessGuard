@@ -65,7 +65,10 @@ const seeds = [
 ];
 
 async function seed() {
-  await mongoose.connect(MONGODB_URI);
+  await mongoose.connect(MONGODB_URI, {
+    serverSelectionTimeoutMS: 10000,
+    family: 4,
+  });
   console.log('[Seed] Connected to MongoDB');
 
   // Remove old demo docs

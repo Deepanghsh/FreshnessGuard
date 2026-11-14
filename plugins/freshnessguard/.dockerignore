@@ -1,0 +1,7 @@
+*.so
+*.exe
+*.test
+*.out
+.git
+.DS_Store
+

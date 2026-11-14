@@ -462,20 +462,6 @@ func PostLLMHook(ctx *BifrostContext, resp *BifrostResponse, e *BifrostError) (*
 	return pluginInstance.PostLLMHook(ctx, resp, e)
 }
 
-// InitPlugin is kept for compatibility with custom loaders expecting (interface{}, error).
-func InitPlugin(config map[string]interface{}) (interface{}, error) {
-	if err := Init(config); err != nil {
-		return nil, err
-	}
-	return pluginInstance, nil
-}
-
-// PluginInstance is the exported symbol for loaders expecting an exported LLMPlugin variable.
-var PluginInstance LLMPlugin = pluginInstance
-
-// Plugin is the exported symbol for loaders expecting an exported "Plugin" variable.
-var Plugin = pluginInstance
-
 func main() {
 	fmt.Fprintln(os.Stderr, "FreshnessGuard plugin binary.")
 	fmt.Fprintln(os.Stderr, "Build as shared library with:")

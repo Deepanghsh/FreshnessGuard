@@ -13,14 +13,14 @@ const VOLATILITY: Record<ClaimCategory, number> = {
 };
 
 // ─── Regex patterns ────────────────────────────────────────────────────────────
-const VERSION_RE = /\bv?\d+\.\d+(?:\.\d+)?(?:-[a-z0-9.]+)?\b/gi;
+const VERSION_RE = /(?<!\$)\bv?\d+\.\d+(?:\.\d+)?(?:-[a-z0-9.]+)?\b/gi;
 const PRICE_RE   = /\$\s*\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:per|\/)\s*(?:month|year|mo|yr|user|seat|request|token|k\s*tokens?))?/gi;
 const DATE_RE    = /\b(202[0-9]|203[0-9])\b/g;
 const STALE_RE   = /\b(latest|current|as of|updated|recent|now supports|currently|at the time of writing|at present|today)\b/gi;
 const LAW_RE     = /\b(GDPR|CCPA|HIPAA|SOX|Basel\s*(?:I{1,3}|IV)|Dodd.Frank|MiFID|PCI.DSS|regulation|directive)\b/gi;
 const CEO_RE     = /\b(?:CEO|CTO|COO|CFO|President|Founder|Chairman|Chairwoman|Director)\b.{0,80}/gi;
 
-function extractWithRegex(text: string): Claim[] {
+export function extractWithRegex(text: string): Claim[] {
   const claims: Claim[] = [];
   const seen = new Set<string>();
 

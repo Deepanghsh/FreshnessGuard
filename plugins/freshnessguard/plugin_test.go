@@ -342,7 +342,7 @@ func TestCleanup(t *testing.T) {
 
 // ─── InitPlugin ───────────────────────────────────────────
 
-func TestInitPlugin(t *testing.T) {
+func TestInit(t *testing.T) {
 	cfg := map[string]interface{}{
 		"service_url":     "http://localhost:3001",
 		"timeout_ms":      float64(3000),
@@ -351,25 +351,27 @@ func TestInitPlugin(t *testing.T) {
 		"inject_note":     true,
 		"api_key":         "secret",
 	}
-	plugin, err := InitPlugin(cfg)
+	err := Init(cfg)
 	if err != nil {
-		t.Fatalf("InitPlugin failed: %v", err)
+		t.Fatalf("Init failed: %v", err)
 	}
-	if plugin == nil {
-		t.Fatal("InitPlugin returned nil")
+	if GetName() != "freshnessguard" {
+		t.Errorf("GetName() = %q; want 'freshnessguard'", GetName())
 	}
-	fg, ok := plugin.(*FreshnessGuardPlugin)
-	if !ok {
-		t.Fatalf("unexpected type: %T", plugin)
+	if pluginInstance.cfg.ServiceURL != "http://localhost:3001" {
+		t.Errorf("service_url not set: %q", pluginInstance.cfg.ServiceURL)
 	}
-	if fg.cfg.ServiceURL != "http://localhost:3001" {
-		t.Errorf("service_url not set: %q", fg.cfg.ServiceURL)
+	if pluginInstance.cfg.TimeoutMs != 3000 {
+		t.Errorf("timeout_ms not set: %d", pluginInstance.cfg.TimeoutMs)
 	}
-	if fg.cfg.TimeoutMs != 3000 {
-		t.Errorf("timeout_ms not set: %d", fg.cfg.TimeoutMs)
-	}
-	if fg.cfg.BasicMode {
+	if pluginInstance.cfg.BasicMode {
 		t.Error("basic_mode should be false")
+	}
+	if pluginInstance.cfg.ScoreThreshold != 0.8 {
+		t.Errorf("score_threshold = %v; want 0.8", pluginInstance.cfg.ScoreThreshold)
+	}
+	if err := Cleanup(); err != nil {
+		t.Errorf("Cleanup() failed: %v", err)
 	}
 }
 

@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import type { ClaimCategory, Verdict, Mode } from '../types/index';
+import type { ClaimCategory, Verdict, Mode, SummaryStatus } from '../types/index';
 
 export interface ISource {
   url: string;
@@ -7,6 +7,8 @@ export interface ISource {
   publishedDate?: string;
   domain?: string;
   isOfficial?: boolean;
+  content?: string;
+  score?: number;
 }
 
 export interface IClaim {
@@ -19,6 +21,7 @@ export interface IClaim {
   liveValue?: string;
   sources?: ISource[];
   score?: number;
+  confidence?: number;
   checkedAt?: Date;
   correctedText?: string;
 }
@@ -33,6 +36,9 @@ export interface IResponse {
   checkedAt: Date;
   claims: IClaim[];
   overallScore: number;
+  overallConfidence?: number;
+  summaryStatus?: SummaryStatus;
+  summaryMessage?: string;
   staleCount: number;
   totalClaims: number;
   fromCache: boolean;
@@ -48,6 +54,8 @@ const SourceSchema = new Schema<ISource>({
   publishedDate: String,
   domain: String,
   isOfficial: Boolean,
+  content: String,
+  score: Number,
 }, { _id: false });
 
 const ClaimSchema = new Schema<IClaim>({
@@ -64,6 +72,7 @@ const ClaimSchema = new Schema<IClaim>({
   liveValue: String,
   sources: [SourceSchema],
   score: { type: Number, min: 0, max: 1 },
+  confidence: { type: Number, min: 0, max: 1 },
   checkedAt: Date,
   correctedText: String,
 }, { _id: false });
@@ -74,9 +83,16 @@ const ResponseSchema = new Schema<IResponse>({
   provider: String,
   originalText: { type: String, required: true },
   correctedAnswer: String,
-  checkedAt: { type: Date, default: Date.now, index: true },
+  checkedAt: { type: Date, default: Date.now },
   claims: [ClaimSchema],
   overallScore: { type: Number, required: true, min: 0, max: 1, default: 1 },
+  overallConfidence: { type: Number, min: 0, max: 1, default: 1 },
+  summaryStatus: {
+    type: String,
+    enum: ['no_claims', 'all_fresh', 'stale_detected', 'unverified', 'bypassed'],
+    default: 'no_claims',
+  },
+  summaryMessage: { type: String, default: 'No claims requiring verification' },
   staleCount: { type: Number, required: true, default: 0 },
   totalClaims: { type: Number, required: true, default: 0 },
   fromCache: { type: Boolean, default: false },
@@ -93,6 +109,8 @@ const ResponseSchema = new Schema<IResponse>({
 // 72h TTL — the longest per-category TTL. Soft per-category TTL enforced in cache.ts.
 // Category TTLs: pricing=6h, version=12h, date=24h, leadership=24h, law=72h, fact=48h
 ResponseSchema.index({ checkedAt: 1 }, { expireAfterSeconds: 259200 });
+ResponseSchema.index({ checkedAt: -1 });
 ResponseSchema.index({ staleCount: 1, checkedAt: -1 });
+ResponseSchema.index({ 'claims.verdict': 1, checkedAt: -1 });
 
 export const Response = mongoose.model<IResponse>('Response', ResponseSchema);

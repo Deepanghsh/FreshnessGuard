@@ -1,8 +1,26 @@
 import { tavily } from '@tavily/core';
 import type { Claim, Source, Verdict, VerificationResult } from '../types/index';
 
-// ─── Token-bucket rate limiter ─────────────────────────────────────────────────
-// Caps Tavily calls to 10 per minute regardless of concurrency.
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * TokenBucket Rate Limiter (Single-Instance Node.js Process)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Caps external Tavily API calls to 10 requests per minute to prevent burst
+ * HTTP 429 (Rate Limit Exceeded) errors and respect API tier boundaries.
+ *
+ * ARCHITECTURAL LIMITATION (MULTI-INSTANCE / CLUSTER DEPLOYMENTS):
+ * This rate limiter maintains token state within the private memory heap of a
+ * single Node.js process. In horizontally scaled deployments (e.g. multi-replica
+ * Kubernetes deployments or Node cluster workers), each process instance maintains
+ * an independent token bucket, which could collectively exceed Tavily quota limits.
+ *
+ * RECOMMENDED DISTRIBUTED PRODUCTION EVOLUTION:
+ * For multi-instance production deployments, replace this in-memory bucket with
+ * an atomic Redis-backed token bucket (e.g., using Redis EVAL Lua scripts with EXPIRE
+ * or a distributed rate limiting library such as `ioredis-ratelimit`) to enforce a
+ * global, cluster-wide rate limit across all gateway workers.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 class TokenBucket {
   private tokens: number;
   private readonly max: number;
@@ -34,21 +52,35 @@ class TokenBucket {
 const rateLimiter = new TokenBucket(10);
 
 // ─── Domain authority helpers ──────────────────────────────────────────────────
-const OFFICIAL_PATTERNS = [
-  /\.gov$/i,
-  /^docs\./i,
-  /^api\./i,
-  /^developer\./i,
-  /\.edu$/i,
-  /official/i,
-  /^blog\./i,
-  /^support\./i,
-];
+// Note: Domain heuristics alone MUST NOT automatically establish source authority.
+// Source authority is evaluated dynamically in `scoring.ts` by blending domain type
+// with Tavily's semantic relevance score and claim corroboration.
+const OFFICIAL_TLD_PATTERN = /\.(?:gov|mil|edu)(?:\.[a-z]{2})?$/i;
+const OFFICIAL_SUBDOMAIN_PATTERN = /^(?:docs|api|developer|developer-portal|support|help)\.[a-z0-9-]+\.[a-z]{2,}$/i;
+const KNOWN_OFFICIAL_DOMAINS = new Set([
+  'github.com',
+  'openai.com',
+  'anthropic.com',
+  'microsoft.com',
+  'google.com',
+  'apple.com',
+  'python.org',
+  'golang.org',
+  'nodejs.org',
+  'rust-lang.org',
+  'kernel.org',
+  'w3.org',
+  'ecma-international.org',
+  'ietf.org',
+]);
 
-function isOfficialDomain(url: string): boolean {
+export function isOfficialDomain(url: string): boolean {
   try {
-    const h = new URL(url).hostname;
-    return OFFICIAL_PATTERNS.some(p => p.test(h));
+    const host = new URL(url).hostname.toLowerCase();
+    if (OFFICIAL_TLD_PATTERN.test(host)) return true;
+    if (OFFICIAL_SUBDOMAIN_PATTERN.test(host)) return true;
+    if (KNOWN_OFFICIAL_DOMAINS.has(host) || KNOWN_OFFICIAL_DOMAINS.has(host.replace(/^www\./, ''))) return true;
+    return false;
   } catch { return false; }
 }
 
@@ -57,73 +89,104 @@ function extractDomain(url: string): string {
 }
 
 // ─── Verdict extraction from Tavily answer & source snippets ──────────────────
-function extractVerdict(
+export function extractVerdict(
   answer: string | undefined | null,
   claim: Claim,
-  results: Array<{ title: string; content?: string; url: string }> = []
+  results: Array<{ url: string; title: string; content?: string }>
 ): { verdict: Verdict; liveValue?: string; correctedText?: string } {
-  const v = claim.extractedValue.toLowerCase().trim();
-
-  // Combine synthesized answer with top search snippets
   const corpus = [
     answer ?? '',
-    ...results.slice(0, 3).map(r => `${r.title} ${r.content ?? ''}`),
-  ].join('\n').toLowerCase();
+    ...results.map(r => `${r.title} ${r.content ?? ''}`),
+  ].join(' ').toLowerCase();
 
-  if (!corpus.trim()) return { verdict: 'unverified' };
+  const rawCorpus = [
+    answer ?? '',
+    ...results.map(r => `${r.title} ${r.content ?? ''}`),
+  ].join(' ');
 
-  // 1. Direct corroboration: check if the exact claim value is affirmed in the corpus
-  const hasClaimValue = corpus.includes(v);
+  const claimVal = claim.extractedValue.toLowerCase().trim();
+  const hasClaimValue = corpus.includes(claimVal);
 
-  // 2. Look for clear contradiction patterns associated with this category
-  let liveValue: string | undefined;
-
+  // Category-specific contradiction detection
   if (claim.category === 'pricing') {
-    // Look for prices mentioned in the evidence
-    const priceMatches = (answer ?? corpus).match(/\$[\d,]+(?:\.\d{1,2})?(?:\s*(?:per|\/)\s*(?:month|year|mo|yr|1m|1k|token|user|seat))?/gi);
-    if (priceMatches && priceMatches.length > 0) {
-      const topPrice = priceMatches[0].trim();
-      if (!topPrice.toLowerCase().includes(v) && !v.includes(topPrice.toLowerCase())) {
-        liveValue = topPrice;
-      }
-    }
-  } else if (claim.category === 'version') {
-    // Look for version numbers in the evidence
-    const verMatches = (answer ?? corpus).match(/\bv?(\d+\.\d+(?:\.\d+)?)\b/g);
-    if (verMatches && verMatches.length > 0) {
-      // Find the most recent/highest version mentioned in relation to the entity
-      const topVer = verMatches[0].trim();
-      if (topVer.toLowerCase() !== v && !v.includes(topVer.toLowerCase())) {
-        liveValue = topVer;
-      }
-    }
-  } else if (claim.category === 'leadership') {
-    const nameMatch = (answer ?? corpus).match(/(?:ceo|chief executive officer|president|led by|appointed)\s+(?:is\s+)?([A-Z][a-z]+ [A-Z][a-z]+)/i);
-    if (nameMatch && nameMatch[1]) {
-      const liveName = nameMatch[1].trim();
-      if (!liveName.toLowerCase().includes(v) && !v.includes(liveName.toLowerCase())) {
-        liveValue = liveName;
+    const prices = corpus.match(/\$\s*(\d+(?:\.\d{2})?)/g);
+    if (prices && prices.length > 0) {
+      const livePrice = prices[0].replace(/\s+/, '');
+      if (claim.extractedValue.replace(/\s+/, '') !== livePrice) {
+        const correctedText = claim.text && claim.extractedValue
+          ? claim.text.replace(claim.extractedValue, livePrice)
+          : undefined;
+        return { verdict: 'stale', liveValue: livePrice, correctedText };
       }
     }
   }
 
-  // 3. Evaluate verdict based on evidence comparison
-  if (liveValue) {
-    const correctedText = claim.text && claim.extractedValue
-      ? claim.text.replace(claim.extractedValue, liveValue)
-      : undefined;
-    return { verdict: 'stale', liveValue, correctedText };
+  if (claim.category === 'version') {
+    const versions = corpus.match(/\bv?(\d+\.\d+(?:\.\d+)?)\b/g);
+    if (versions && versions.length > 0) {
+      const cleanClaim = claim.extractedValue.replace(/^v/i, '').trim();
+      const distinct = versions
+        .map(v => v.replace(/^v/i, ''))
+        .filter(v => v !== cleanClaim);
+
+      if (distinct.length > 0) {
+        const highest = distinct.sort((a, b) => {
+          const pa = a.split('.').map(Number);
+          const pb = b.split('.').map(Number);
+          for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+            const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+            if (diff !== 0) return diff;
+          }
+          return 0;
+        })[0];
+
+        const pa = cleanClaim.split('.').map(Number);
+        const pb = highest.split('.').map(Number);
+        let isStale = false;
+        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+          if ((pb[i] ?? 0) > (pa[i] ?? 0)) { isStale = true; break; }
+          if ((pb[i] ?? 0) < (pa[i] ?? 0)) { break; }
+        }
+
+        if (isStale) {
+          // liveValue uses plain semver without 'v' prefix so callers can normalise as needed
+          const liveValue = highest;
+          const correctedText = claim.text && claim.extractedValue
+            ? claim.text.replace(claim.extractedValue, liveValue)
+            : undefined;
+          return { verdict: 'stale', liveValue, correctedText };
+        }
+      }
+    }
   }
 
-  // If the exact value was verified in live sources and no conflicting value was found:
-  if (hasClaimValue) {
-    return { verdict: 'current' };
+  if (claim.category === 'leadership') {
+    // Match "CEO is <Name>" or "<Name> is [current] CEO" without case-insensitivity on the Name capture
+    const ceoPattern1 = /(?:CEO|Chief Executive Officer)\s*(?::|\s+is|\s+was|\s+named|\s+replaced by)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/;
+    const ceoPattern2 = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:is|became|serves\s+as|was\s+named|was\s+appointed)\s+(?:the\s+)?(?:new\s+|current\s+)?(?:CEO|Chief Executive Officer)/;
+    const ceoMatch = rawCorpus.match(ceoPattern2) || rawCorpus.match(ceoPattern1);
+
+    if (ceoMatch) {
+      const rawName = ceoMatch[1].trim();
+      const cleanName = rawName.replace(/\s+(?:appointed|since|in|from|effective|starting|as of|is|was).*$/i, '').trim();
+      if (!rawCorpus.toLowerCase().includes(claimVal)) {
+        const correctedText = claim.text && claim.extractedValue
+          ? claim.text.replace(claim.extractedValue, cleanName)
+          : undefined;
+        return { verdict: 'stale', liveValue: cleanName, correctedText };
+      }
+    }
   }
 
   // If evidence mentions replacement, discontinuation, or invalidation:
   const explicitInvalidation = /(?:superseded by|deprecated in|no longer supported|invalidated by|repealed|stepped down)/i;
   if (explicitInvalidation.test(corpus)) {
     return { verdict: 'stale' };
+  }
+
+  // If the exact value was verified in live sources and no conflicting value was found:
+  if (hasClaimValue && results.length > 0) {
+    return { verdict: 'current' };
   }
 
   return { verdict: 'unverified' };
@@ -142,13 +205,16 @@ export async function verifyClaim(claim: Claim): Promise<VerificationResult> {
 
   const tvly = tavily({ apiKey });
 
-  // Build a focused query
+  // Dynamically compute current year context to avoid stale search biases
+  const currentYear = new Date().getFullYear();
+  const nextYear = currentYear + 1;
+
   const categoryContext: Record<string, string> = {
-    pricing:    'current price cost subscription',
+    pricing:    `current price cost subscription ${currentYear}`,
     version:    'latest stable release version',
-    leadership: 'current CEO CTO executive',
-    law:        'current law regulation status 2024 2025',
-    date:       'current date updated',
+    leadership: 'current CEO CTO executive leadership',
+    law:        `current law regulation status ${currentYear} ${nextYear}`,
+    date:       `current status date ${currentYear}`,
     fact:       'current status accurate',
   };
   const ctx = categoryContext[claim.category] ?? 'current accurate';
@@ -172,9 +238,11 @@ export async function verifyClaim(claim: Claim): Promise<VerificationResult> {
         .map(r => ({
           url:           r.url,
           title:         r.title,
-          publishedDate: r.publishedDate ?? undefined,
+          publishedDate: r.publishedDate ?? (r as any).published_date ?? undefined,
           domain:        extractDomain(r.url),
           isOfficial:    isOfficialDomain(r.url),
+          content:       r.content ? r.content.slice(0, 300) : undefined,
+          score:         typeof r.score === 'number' ? r.score : undefined,
         }))
         .sort((a, b) => {
           // Prefer official, then recent
@@ -202,3 +270,16 @@ export async function verifyClaim(claim: Claim): Promise<VerificationResult> {
   return { claim, verdict: 'unverified', sources: [] };
 }
 
+/**
+ * verifyClaims — executes claim verification with controlled concurrency
+ * to respect Tavily rate limits and avoid socket exhaustion.
+ */
+export async function verifyClaims(claims: Claim[], concurrency = 3): Promise<VerificationResult[]> {
+  const results: VerificationResult[] = [];
+  for (let i = 0; i < claims.length; i += concurrency) {
+    const batch = claims.slice(i, i + concurrency);
+    const batchResults = await Promise.all(batch.map(c => verifyClaim(c)));
+    results.push(...batchResults);
+  }
+  return results;
+}

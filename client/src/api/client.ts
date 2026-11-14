@@ -1,11 +1,13 @@
-import type { ResponseDoc, StatsData, PaginatedResponses, HealthStatus } from '../types';
+import type { ResponseDoc, StatsData, PaginatedResponses, HealthStatus, Mode, SSEEvent } from '../types';
 
 const BASE = '';
 
 class APIError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
     this.name = 'APIError';
+    this.status = status;
   }
 }
 
@@ -34,10 +36,10 @@ export const api = {
   getStats: () =>
     apiFetch<StatsData>('/api/stats'),
 
-  postCheck: (text: string, model?: string) =>
+  postCheck: (text: string, model?: string, mode: Mode = 'inline', provider?: string) =>
     apiFetch<ResponseDoc>('/api/check', {
       method: 'POST',
-      body: JSON.stringify({ text, model }),
+      body: JSON.stringify({ text, model, mode, provider }),
     }),
 
   postVerify: (id: string) =>
@@ -50,25 +52,65 @@ export const api = {
     apiFetch<HealthStatus>('/healthz'),
 };
 
-export function subscribeToEvents(onMessage: (data: unknown) => void): () => void {
-  let es: EventSource;
-  let retryTimeout: ReturnType<typeof setTimeout>;
+export type SSECallback = (event: SSEEvent) => void;
+
+const SSE_EVENT_TYPES = ['message', 'connected', 'new_response', 'response_updated', 'cache_hit', 'reverify'];
+
+export function subscribeToEvents(onMessage: SSECallback): () => void {
+  let es: EventSource | null = null;
+  let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+  let isClosed = false;
 
   function connect() {
-    es = new EventSource('/api/events');
-    es.onmessage = (e) => {
-      try { onMessage(JSON.parse(e.data as string)); } catch { /* ignore parse errors */ }
-    };
-    es.onerror = () => {
-      es.close();
-      retryTimeout = setTimeout(connect, 5000); // reconnect after 5s
-    };
+    if (isClosed) return;
+    try {
+      es = new EventSource('/api/events');
+
+      const handleRaw = (type: string, rawData: string) => {
+        try {
+          const parsed = JSON.parse(rawData);
+          onMessage({ type, ...(typeof parsed === 'object' && parsed !== null ? parsed : { data: parsed }) });
+        } catch {
+          onMessage({ type, data: rawData });
+        }
+      };
+
+      es.onmessage = (e) => handleRaw('message', e.data);
+
+      for (const evType of SSE_EVENT_TYPES) {
+        if (evType !== 'message') {
+          es.addEventListener(evType, (e: Event) => {
+            const me = e as MessageEvent;
+            handleRaw(evType, me.data);
+          });
+        }
+      }
+
+      es.onerror = () => {
+        if (es) {
+          es.close();
+          es = null;
+        }
+        if (!isClosed) {
+          retryTimeout = setTimeout(connect, 3000);
+        }
+      };
+    } catch {
+      if (!isClosed) {
+        retryTimeout = setTimeout(connect, 5000);
+      }
+    }
   }
 
   connect();
+
   return () => {
-    clearTimeout(retryTimeout);
-    es?.close();
+    isClosed = true;
+    if (retryTimeout) clearTimeout(retryTimeout);
+    if (es) {
+      es.close();
+      es = null;
+    }
   };
 }
 

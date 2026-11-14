@@ -23,5 +23,7 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 3001
 
-CMD ["node", "dist/index.js"]
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost:3001/healthz || exit 1
 
+CMD ["node", "dist/index.js"]

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { subscribeToEvents } from '../api/client';
+import type { SSEEvent } from '../types';
 
-export function useSSE(onMessage: (data: unknown) => void) {
+export function useSSE(onMessage?: (data: SSEEvent) => void) {
   const [connected, setConnected] = useState(false);
   const cbRef = useRef(onMessage);
   cbRef.current = onMessage;
@@ -9,13 +10,13 @@ export function useSSE(onMessage: (data: unknown) => void) {
   useEffect(() => {
     setConnected(false);
     const unsub = subscribeToEvents((data) => {
-      const d = data as { type?: string };
-      if (d?.type === 'connected' || d === null) setConnected(true);
-      else { setConnected(true); cbRef.current(data); }
+      setConnected(true);
+      if (cbRef.current) {
+        cbRef.current(data);
+      }
     });
     return unsub;
   }, []);
 
   return { connected };
 }
-

@@ -4,38 +4,30 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
-import { Radio, Settings, RefreshCw } from 'lucide-react';
+import { Radio, RefreshCw, AlertCircle, ShieldCheck, Zap } from 'lucide-react';
 import { useStats } from '../hooks/useStats';
 import { useSSE } from '../hooks/useSSE';
 import { useToast } from '../components/Layout';
 import { api } from '../api/client';
 import StatCard from '../components/StatCard';
 import ScoreRing from '../components/ScoreRing';
-import ClaimBadge from '../components/ClaimBadge';
+import SummaryBadge from '../components/SummaryBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
-import type { ResponseDoc, SSEEvent } from '../types';
-
-// ─── Settings stored in localStorage ─────────────────────────────────────────
-interface LocalSettings {
-  basicMode: boolean;
-  serviceURL: string;
-  timeoutMs: number;
-  scoreThreshold: number;
-}
-
-function loadSettings(): LocalSettings {
-  try {
-    const s = localStorage.getItem('fg-settings');
-    return s ? JSON.parse(s) : { basicMode: false, serviceURL: 'http://localhost:3001', timeoutMs: 2000, scoreThreshold: 0.75 };
-  } catch { return { basicMode: false, serviceURL: 'http://localhost:3001', timeoutMs: 2000, scoreThreshold: 0.75 }; }
-}
+import type { ResponseDoc, SSEEvent, SummaryStatus } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch {
+    return iso;
+  }
 }
-function fmtPct(n: number) { return `${(n * 100).toFixed(1)}%`; }
+
+function fmtPct(n: number) {
+  return `${(n * 100).toFixed(1)}%`;
+}
 
 // ─── Custom recharts tooltip ─────────────────────────────────────────────────
 function CustomTooltip({ active, payload, label }: Record<string, unknown>) {
@@ -53,37 +45,75 @@ function CustomTooltip({ active, payload, label }: Record<string, unknown>) {
 export default function Overview() {
   const navigate = useNavigate();
   const { showError } = useToast();
-  const { stats, loading: statsLoading } = useStats(5000);
+  const { stats, loading: statsLoading, refetch: refetchStats } = useStats(5000);
   const [responses, setResponses] = useState<ResponseDoc[]>([]);
-  const [liveFeed, setLiveFeed]   = useState<SSEEvent[]>([]);
-  const [settings, setSettings]   = useState<LocalSettings>(loadSettings);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // SSE live updates
-  const { connected } = useSSE(useCallback((data: unknown) => {
-    const ev = data as SSEEvent;
-    if (ev._id || ev.requestId) {
-      setLiveFeed(prev => [ev, ...prev].slice(0, 20));
+  const { connected } = useSSE(useCallback((event: SSEEvent) => {
+    if (event.type === 'new_response' && event._id) {
+      refetchStats();
+      // Prepend to recent list
+      setResponses(prev => {
+        if (prev.some(r => r._id === event._id)) return prev;
+        const newDoc: ResponseDoc = {
+          _id: event._id!,
+          requestId: event.requestId ?? '',
+          model: event.model ?? 'unknown',
+          originalText: event.previewText ?? '',
+          checkedAt: event.checkedAt ?? new Date().toISOString(),
+          claims: [],
+          overallScore: event.overallScore ?? 1.0,
+          overallConfidence: event.overallConfidence ?? 1.0,
+          summaryStatus: event.summaryStatus,
+          summaryMessage: event.summaryMessage,
+          staleCount: event.staleCount ?? 0,
+          totalClaims: event.totalClaims ?? 0,
+          fromCache: false,
+          processingMs: event.processingMs ?? 0,
+          mode: 'inline',
+        };
+        return [newDoc, ...prev].slice(0, 20);
+      });
+    } else if (event.type === 'response_updated' && event._id) {
+      refetchStats();
+      setResponses(prev =>
+        prev.map(r =>
+          r._id === event._id
+            ? {
+                ...r,
+                overallScore: event.overallScore ?? r.overallScore,
+                overallConfidence: event.overallConfidence ?? r.overallConfidence,
+                staleCount: event.staleCount ?? r.staleCount,
+                totalClaims: event.totalClaims ?? r.totalClaims,
+                summaryStatus: event.summaryStatus ?? r.summaryStatus,
+                summaryMessage: event.summaryMessage ?? r.summaryMessage,
+              }
+            : r
+        )
+      );
     }
-  }, []));
+  }, [refetchStats]));
 
   // Load initial responses
   const loadResponses = useCallback(() => {
     setRefreshing(true);
-    api.getResponses(1, 10)
-      .then(r => setResponses(r.data))
-      .catch(e => showError((e as Error).message))
+    setFetchError(null);
+    api.getResponses(1, 15)
+      .then(r => {
+        setResponses(r.data);
+        setFetchError(null);
+      })
+      .catch(e => {
+        const msg = (e as Error).message || 'Failed to connect to backend';
+        setFetchError(msg);
+        showError(msg);
+      })
       .finally(() => setRefreshing(false));
   }, [showError]);
 
   useEffect(() => { loadResponses(); }, [loadResponses]);
-
-  // Settings save
-  const saveSettings = (next: LocalSettings) => {
-    setSettings(next);
-    localStorage.setItem('fg-settings', JSON.stringify(next));
-  };
 
   // Build hourly chart data (last 24 1h buckets)
   const chartData = (() => {
@@ -92,13 +122,21 @@ export default function Overview() {
         time: h._id.slice(11, 16),
         stale: h.stale,
         current: h.current,
+        unverified: h.unverified ?? 0,
         total: h.total,
       }));
     }
     return [];
   })();
 
-  // Sparkline history for stat cards (last 7 hours from hourly)
+  // Calculate average freshness score across loaded responses
+  const avgFreshnessScore = (() => {
+    if (responses.length === 0) return null;
+    const sum = responses.reduce((acc, r) => acc + (r.overallScore ?? 1.0), 0);
+    return sum / responses.length;
+  })();
+
+  // Sparkline history for stat cards
   const spark = (key: 'stale' | 'current' | 'total') =>
     chartData.length > 0 ? chartData.slice(-7).map(d => d[key]) : undefined;
 
@@ -110,34 +148,67 @@ export default function Overview() {
         <div>
           <h1 style={{ marginBottom: 4 }}>Overview</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>
-            Live freshness intelligence across all LLM responses
+            Real-time temporal freshness intelligence &amp; stale claim telemetry across all gateway traffic
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {/* SSE indicator */}
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: connected ? 'var(--current)' : 'var(--muted)' }}>
-            <Radio size={12} aria-hidden="true" />
-            {connected ? 'Live' : 'Connecting…'}
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: '0.75rem',
+              color: connected ? 'var(--current)' : 'var(--muted)',
+              background: connected ? 'var(--current-dim)' : 'rgba(139, 150, 165, 0.1)',
+              padding: '4px 10px',
+              borderRadius: 4,
+              border: `1px solid ${connected ? 'rgba(74, 222, 128, 0.3)' : 'var(--border)'}`,
+            }}
+          >
+            <Radio size={12} aria-hidden="true" style={{ animation: connected ? 'pulse 2s infinite' : undefined }} />
+            {connected ? 'SSE Stream Active' : 'Connecting to Gateway…'}
           </span>
           <button
             className="btn btn-secondary"
-            onClick={loadResponses}
+            onClick={() => {
+              loadResponses();
+              refetchStats();
+            }}
             disabled={refreshing}
-            aria-label="Refresh responses"
+            aria-label="Refresh responses and statistics"
           >
             <RefreshCw size={14} style={refreshing ? { animation: 'spin 0.75s linear infinite' } : {}} aria-hidden="true" />
             Refresh
           </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setSettingsOpen(o => !o)}
-            aria-expanded={settingsOpen}
-            aria-controls="settings-panel"
-          >
-            <Settings size={14} aria-hidden="true" /> Settings
-          </button>
         </div>
       </div>
+
+      {/* ── Network / Backend Error Banner ─────────────────────────────────────── */}
+      {fetchError && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'var(--stale-dim)',
+            border: '1px solid var(--stale)',
+            borderRadius: 6,
+            padding: '12px 16px',
+            color: 'var(--text)',
+            fontSize: '0.875rem',
+          }}
+          role="alert"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertCircle size={18} color="var(--stale)" />
+            <span><strong>Backend Connection Error:</strong> {fetchError}. Ensure FreshnessGuard backend is running on port 3001.</span>
+          </div>
+          <button className="btn btn-secondary" onClick={loadResponses} style={{ padding: '4px 12px', fontSize: '0.8125rem' }}>
+            Retry Connection
+          </button>
+        </div>
+      )}
 
       {/* ── KPI Cards ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
@@ -145,6 +216,13 @@ export default function Overview() {
           label="Total Scanned"
           value={statsLoading ? '—' : (stats?.totalScanned ?? 0).toLocaleString()}
           sparkData={spark('total')}
+          color="var(--accent)"
+          loading={statsLoading}
+        />
+        <StatCard
+          label="Total Claims Detected"
+          value={statsLoading ? '—' : (stats?.totalClaims ?? 0).toLocaleString()}
+          sparkData={undefined}
           color="var(--accent)"
           loading={statsLoading}
         />
@@ -170,38 +248,50 @@ export default function Overview() {
           loading={statsLoading}
         />
         <StatCard
-          label="P95 Overhead"
+          label="Avg Freshness Score"
+          value={avgFreshnessScore !== null ? `${Math.round(avgFreshnessScore * 100)}%` : '—'}
+          color="var(--current)"
+          loading={refreshing && responses.length === 0}
+        />
+        <StatCard
+          label="P95 Verification Latency"
           value={statsLoading ? '—' : (stats?.p95ProcessingMs ?? 0)}
           unit="ms"
           color="var(--muted)"
           loading={statsLoading}
-          trendLabel={stats ? `avg ${stats.avgProcessingMs}ms` : undefined}
+          trendLabel={stats ? `avg ${stats.avgProcessingMs}ms · cache ${(stats.cacheHitRate * 100).toFixed(0)}%` : undefined}
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: settingsOpen ? '1fr 300px' : '1fr', gap: '1.5rem', alignItems: 'start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-          {/* ── Claims Over Time chart ──────────────────────────────────────────── */}
-          <div className="panel">
-            <h2 style={{ marginBottom: '1rem', fontSize: '0.9375rem' }}>Claims Over Time (last 24h)</h2>
-            {chartData.length === 0 ? (
-              <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: '0.875rem', gap: 6 }}>
-                <span>No claim activity recorded in the last 24 hours.</span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--dim)' }}>Verified claims through Bifrost will appear here in real time.</span>
-              </div>
-            ) : (
+        {/* ── Claims Over Time chart ──────────────────────────────────────────── */}
+        <div className="panel">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h2 style={{ fontSize: '0.9375rem' }}>Hourly Factual Claim Telemetry (Last 24 Hours)</h2>
+            <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Live Web Corroboration via Tavily API</span>
+          </div>
+          {chartData.length === 0 ? (
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: '0.875rem', gap: 6 }}>
+              <span>No claim activity recorded in the last 24 hours.</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--dim)' }}>Verified AI gateway requests and playground queries will populate this trend in real time.</span>
+            </div>
+          ) : (
             <div style={{ height: 220 }} aria-label="Area chart of claims over time" role="img">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="gStale"   x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="var(--stale)"   stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--stale)"   stopOpacity={0}   />
+                    <linearGradient id="gStale" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--stale)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--stale)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gCurrent" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="var(--current)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--current)" stopOpacity={0}   />
+                      <stop offset="5%" stopColor="var(--current)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--current)" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gUnverified" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--unverified)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--unverified)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -209,150 +299,138 @@ export default function Overview() {
                   <YAxis tick={{ fill: 'var(--muted)', fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8, color: 'var(--muted)' }} />
-                  <Area type="monotone" dataKey="stale"   name="Stale"   stroke="var(--stale)"   fill="url(#gStale)"   strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="stale" name="Stale" stroke="var(--stale)" fill="url(#gStale)" strokeWidth={2} dot={false} />
                   <Area type="monotone" dataKey="current" name="Current" stroke="var(--current)" fill="url(#gCurrent)" strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="unverified" name="Unverified" stroke="var(--unverified)" fill="url(#gUnverified)" strokeWidth={1.5} dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-            )}
-          </div>
-
-          {/* ── Live Feed ──────────────────────────────────────────────────────── */}
-          <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h2 style={{ fontSize: '0.9375rem' }}>Recent Responses</h2>
-              <span className="badge badge-muted">{responses.length} shown</span>
-            </div>
-
-            {responses.length === 0 && !refreshing && (
-              <EmptyState message="No responses yet" detail="Send a request through the Bifrost gateway or use the Playground." />
-            )}
-            {refreshing && responses.length === 0 && <LoadingSpinner label="Loading responses" />}
-
-            {responses.length > 0 && (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Recent LLM responses">
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      {['Time', 'Model', 'Score', 'Claims', 'Preview'].map(h => (
-                        <th key={h} style={{ padding: '0.625rem 1rem', textAlign: 'left', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {responses.map(r => (
-                      <tr
-                        key={r._id}
-                        onClick={() => navigate(`/inspector/${r._id}`)}
-                        onKeyDown={e => e.key === 'Enter' && navigate(`/inspector/${r._id}`)}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`View response from ${r.model}`}
-                        style={{
-                          borderBottom: '1px solid var(--border)',
-                          cursor: 'pointer',
-                          transition: 'background var(--transition)',
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-hover)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <td style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--muted)', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)' }}>
-                          {fmtTime(r.checkedAt)}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                          <code style={{ color: 'var(--accent)', fontSize: '0.75rem' }}>{r.model}</code>
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <ScoreRing score={r.overallScore} size={36} strokeWidth={4} />
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
-                          {r.staleCount > 0 ? (
-                            <ClaimBadge verdict="stale" />
-                          ) : (
-                            <ClaimBadge verdict="current" />
-                          )}
-                          <span style={{ marginLeft: 6, fontSize: '0.75rem', color: 'var(--muted)' }}>
-                            {r.staleCount}/{r.totalClaims}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', color: 'var(--muted)', maxWidth: 320 }}>
-                          <span className="truncate" style={{ display: 'block', maxWidth: 300 }}>
-                            {r.originalText.slice(0, 80)}{r.originalText.length > 80 ? '…' : ''}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* ── Settings Panel ──────────────────────────────────────────────────── */}
-        {settingsOpen && (
-          <aside id="settings-panel" className="panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <h2 style={{ fontSize: '0.9375rem' }}>Plugin Settings</h2>
-            <p style={{ fontSize: '0.75rem', color: 'var(--muted)', lineHeight: 1.6 }}>
-              These settings are stored locally. Restart the Go plugin to apply changes.
-            </p>
-
+        {/* ── Recent Responses Table ─────────────────────────────────────────── */}
+        <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <label htmlFor="serviceURL">Service URL</label>
-              <input
-                id="serviceURL"
-                type="url"
-                value={settings.serviceURL}
-                onChange={e => saveSettings({ ...settings, serviceURL: e.target.value })}
-                placeholder="http://localhost:3001"
-              />
+              <h2 style={{ fontSize: '0.9375rem', marginBottom: 2 }}>Recent Gateway &amp; Playground Responses</h2>
+              <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: 0 }}>Click any response to open deep inspection</p>
             </div>
+            <span className="badge badge-muted">{responses.length} responses displayed</span>
+          </div>
 
-            <div>
-              <label htmlFor="timeoutMs">Timeout (ms)</label>
-              <input
-                id="timeoutMs"
-                type="number"
-                min={100}
-                max={30000}
-                value={settings.timeoutMs}
-                onChange={e => saveSettings({ ...settings, timeoutMs: Number(e.target.value) })}
-              />
-            </div>
+          {responses.length === 0 && !refreshing && !fetchError && (
+            <EmptyState
+              message="No verification records yet"
+              detail="Send an AI response through Bifrost or submit a sample prompt in the Playground to see verification results here."
+            />
+          )}
 
-            <div>
-              <label htmlFor="scoreThreshold">Score Threshold (0–1)</label>
-              <input
-                id="scoreThreshold"
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={settings.scoreThreshold}
-                onChange={e => saveSettings({ ...settings, scoreThreshold: Number(e.target.value) })}
-              />
-            </div>
+          {refreshing && responses.length === 0 && (
+            <LoadingSpinner label="Loading verification telemetry" />
+          )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <input
-                id="basicMode"
-                type="checkbox"
-                checked={settings.basicMode}
-                onChange={e => saveSettings({ ...settings, basicMode: e.target.checked })}
-                style={{ width: 'auto' }}
-              />
-              <label htmlFor="basicMode" style={{ marginBottom: 0, cursor: 'pointer' }}>Basic mode (regex only)</label>
-            </div>
+          {responses.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Recent LLM responses">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['Timestamp', 'Model & Mode', 'Freshness Score', 'Summary Status', 'Claims Ratio', 'Response Preview'].map(h => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: '0.625rem 1rem',
+                          textAlign: 'left',
+                          fontSize: '0.6875rem',
+                          fontWeight: 600,
+                          color: 'var(--muted)',
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {responses.map(r => (
+                    <tr
+                      key={r._id}
+                      onClick={() => navigate(`/inspector/${r._id}`)}
+                      onKeyDown={e => e.key === 'Enter' && navigate(`/inspector/${r._id}`)}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`View response from ${r.model}`}
+                      style={{
+                        borderBottom: '1px solid var(--border)',
+                        cursor: 'pointer',
+                        transition: 'background var(--transition)',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-hover)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {/* Timestamp */}
+                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                        {fmtTime(r.checkedAt)}
+                      </td>
 
-            <div style={{ padding: '0.75rem', background: 'rgba(94,234,212,0.06)', borderRadius: 6, border: '1px solid var(--border)' }}>
-              <p style={{ fontSize: '0.6875rem', color: 'var(--muted)', lineHeight: 1.6 }}>
-                Settings are saved to localStorage. To apply to the Go plugin, update <code>config.json</code> and restart Bifrost.
-              </p>
+                      {/* Model & Mode */}
+                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text)' }}>{r.model}</span>
+                          <span className={`badge ${r.mode === 'bypass' ? 'badge-muted' : r.mode === 'basic' ? 'badge-unverified' : 'badge-accent'}`}>
+                            {r.mode}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Freshness Score */}
+                      <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <ScoreRing score={r.overallScore} size={34} strokeWidth={3.5} />
+                          <span style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)' }}>
+                            {(r.overallScore * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Summary Status */}
+                      <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
+                        <SummaryBadge
+                          status={r.summaryStatus ?? (r.totalClaims === 0 ? 'no_claims' : r.staleCount > 0 ? 'stale_detected' : 'all_fresh')}
+                          message={r.summaryMessage}
+                          size="sm"
+                        />
+                      </td>
+
+                      {/* Claims Ratio */}
+                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                        {r.totalClaims === 0 ? (
+                          <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>0 claims</span>
+                        ) : (
+                          <span>
+                            <span style={{ color: r.staleCount > 0 ? 'var(--stale)' : 'var(--current)', fontWeight: 600 }}>
+                              {r.staleCount} stale
+                            </span>
+                            <span style={{ color: 'var(--muted)' }}> / {r.totalClaims} total</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Response Preview */}
+                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', maxWidth: 360 }}>
+                        <p className="truncate" style={{ margin: 0, color: 'var(--muted)', fontSize: '0.8125rem' }}>
+                          {r.originalText}
+                        </p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </aside>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
 }
-

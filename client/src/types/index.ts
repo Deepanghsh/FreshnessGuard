@@ -1,6 +1,7 @@
 export type ClaimCategory = 'pricing' | 'version' | 'date' | 'law' | 'leadership' | 'fact';
 export type Verdict = 'current' | 'stale' | 'unverified';
 export type Mode = 'inline' | 'async' | 'basic' | 'bypass';
+export type SummaryStatus = 'no_claims' | 'all_fresh' | 'stale_detected' | 'unverified' | 'bypassed';
 
 export interface Source {
   url: string;
@@ -8,6 +9,8 @@ export interface Source {
   publishedDate?: string;
   domain?: string;
   isOfficial?: boolean;
+  content?: string;
+  score?: number;
 }
 
 export interface Claim {
@@ -20,6 +23,7 @@ export interface Claim {
   liveValue?: string;
   sources?: Source[];
   score?: number;
+  confidence?: number;
   checkedAt?: string;
   correctedText?: string;
 }
@@ -34,9 +38,13 @@ export interface ResponseDoc {
   checkedAt: string;
   claims: Claim[];
   overallScore: number;
+  overallConfidence?: number;
+  summaryStatus?: SummaryStatus;
+  summaryMessage?: string;
   staleCount: number;
   totalClaims: number;
   fromCache: boolean;
+  cacheHitAt?: string;
   processingMs: number;
   mode: Mode;
   fromLLM?: boolean;
@@ -44,18 +52,30 @@ export interface ResponseDoc {
 
 export interface StatsData {
   totalScanned: number;
-  totalClaims?: number;
+  totalClaims: number;
   totalStale: number;
-  totalCurrent?: number;
-  totalUnverified?: number;
+  totalCurrent: number;
+  totalUnverified: number;
   cacheHitRate: number;
   cacheHits: number;
   cacheMisses: number;
   avgProcessingMs: number;
   p95ProcessingMs: number;
   p99ProcessingMs: number;
-  claimsPerCategory?: Array<{ _id: string; count: number; staleCount: number; currentCount?: number; unverifiedCount?: number }>;
-  hourlyHistory?: Array<{ _id: string; total: number; stale: number; current: number; unverified?: number }>;
+  claimsPerCategory?: Array<{
+    _id: string;
+    count: number;
+    staleCount: number;
+    currentCount?: number;
+    unverifiedCount?: number;
+  }>;
+  hourlyHistory?: Array<{
+    _id: string;
+    total: number;
+    stale: number;
+    current: number;
+    unverified?: number;
+  }>;
 }
 
 export interface PaginatedResponses {
@@ -68,6 +88,8 @@ export interface PaginatedResponses {
 
 export interface HealthStatus {
   status: 'ok' | 'error';
+  service?: string;
+  version?: string;
   mongodb: 'connected' | 'disconnected';
   timestamp: string;
   sseClients?: number;
@@ -80,6 +102,9 @@ export interface SSEEvent {
   requestId?: string;
   model?: string;
   overallScore?: number;
+  overallConfidence?: number;
+  summaryStatus?: SummaryStatus;
+  summaryMessage?: string;
   staleCount?: number;
   totalClaims?: number;
   processingMs?: number;
