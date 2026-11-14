@@ -29,3 +29,6 @@ data/
 .idea/
 .DS_Store
 Thumbs.db
+# Local backup snapshots (do not commit)
+.backup-bifrost-*/
+*.backup

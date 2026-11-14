@@ -3,7 +3,8 @@
   "version": 2,
   "source_of_truth": "config.json",
   "client": {
-    "enable_logging": true
+    "enable_logging": true,
+    "enforce_auth_on_inference": false
   },
   "providers": {
     "openai": {
@@ -11,7 +12,21 @@
         {
           "name": "openai-primary",
           "value": "env.OPENAI_API_KEY",
-          "models": ["*"],
+          "models": [
+            "*"
+          ],
+          "weight": 1.0
+        }
+      ]
+    },
+    "gemini": {
+      "keys": [
+        {
+          "name": "gemini-primary",
+          "value": "env.GEMINI_API_KEY",
+          "models": [
+            "gemini-3.1-flash-lite"
+          ],
           "weight": 1.0
         }
       ]
@@ -31,4 +46,3 @@
     }
   ]
 }
-

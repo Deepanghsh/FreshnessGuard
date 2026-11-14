@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-# Build FreshnessGuard Bifrost plugin (.so) inside Docker for Linux target
+# Build FreshnessGuard Bifrost plugin using Bifrost-compatible Go version.
 set -euo pipefail
 
-echo "==> Building FreshnessGuard Go plugin for Linux target..."
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "==> Building FreshnessGuard plugin with Go 1.27.3..."
+
 docker run --rm \
-  -v "$(pwd)/plugins/freshnessguard:/build" \
+  -v "$ROOT_DIR/plugins/freshnessguard:/build" \
   -w /build \
   -e CGO_ENABLED=1 \
   -e GOOS=linux \
   -e GOARCH=amd64 \
-  golang:1.21-alpine \
-  sh -c "apk add --no-cache gcc musl-dev libc-dev && go build -buildmode=plugin -trimpath -ldflags='-s -w' -o /build/freshnessguard.so ."
+  golang:1.27.3-alpine3.24 \
+  sh -c "apk add --no-cache gcc musl-dev libc-dev && go mod download && go build -buildmode=plugin -trimpath -ldflags='-s -w' -o /build/freshnessguard.so ."
 
-mkdir -p plugins
-cp plugins/freshnessguard/freshnessguard.so plugins/freshnessguard.so
+mkdir -p "$ROOT_DIR/plugins"
+cp "$ROOT_DIR/plugins/freshnessguard/freshnessguard.so" "$ROOT_DIR/plugins/freshnessguard.so"
+
 echo "==> Successfully built plugins/freshnessguard.so"
-

@@ -1,3 +1,4 @@
+
 import { extractVerdict, verifyClaim, verifyClaims } from '../services/verification';
 import type { Claim } from '../types/index';
 
@@ -74,6 +75,30 @@ describe('Verification Service — extractVerdict', () => {
     );
     expect(verdict.verdict).toBe('stale');
     expect(verdict.liveValue).toBe('Linda Yaccarino');
+  });
+
+  // Regression test: US President claims must also detect a changed officeholder.
+  it('detects stale US President claim when current evidence names a different president', () => {
+    const usPresidentClaim: Claim = {
+      id: 'c5',
+      text: 'The current president of the United States is Joe Biden.',
+      category: 'leadership',
+      extractedValue: 'The current president of the United States is Joe Biden',
+      likelihood: 0.85,
+    };
+
+    const verdict = extractVerdict(
+      'Donald Trump is the current President of the United States.',
+      usPresidentClaim,
+      [{
+        title: 'The White House - President',
+        url: 'https://www.whitehouse.gov/administration/donald-j-trump/',
+        content: 'Donald Trump is the 47th President of the United States.',
+      }]
+    );
+
+    expect(verdict.verdict).toBe('stale');
+    expect(verdict.liveValue).toBe('Donald Trump');
   });
 
   it('detects stale when explicit invalidation / deprecation keywords appear', () => {

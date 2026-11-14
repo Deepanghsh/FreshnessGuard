@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/maximhq/bifrost/core/schemas"
 )
 
 // ─── helpers ────────────────────────────────────────────
@@ -23,10 +26,24 @@ func testPlugin(basicMode bool, serviceURL string, timeoutMs int) *FreshnessGuar
 	})
 }
 
+var testResponseHeaders map[string]string
+
+func postLLMForTest(p *FreshnessGuardPlugin, ctx *BifrostContext, resp *BifrostResponse) (*BifrostResponse, *BifrostError, error) {
+	if ctx == nil {
+		ctx = schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	}
+	got, bifrostErr, err := p.PostLLMHook(ctx, resp, nil)
+	metadata := &schemas.HTTPResponseMetadata{}
+	if hookErr := HTTPTransportResponseHeadersHook(ctx, nil, metadata); hookErr != nil && err == nil {
+		err = hookErr
+	}
+	testResponseHeaders = metadata.Headers
+	return got, bifrostErr, err
+}
+
 func makeResponse(text string) *BifrostResponse {
 	s := text
 	return &BifrostResponse{
-		Provider: "openai",
 		ChatResponse: &BifrostChatResponse{
 			Model: "gpt-4o",
 			Choices: []BifrostResponseChoice{
@@ -105,7 +122,7 @@ func TestBasicMode_NoteAppended(t *testing.T) {
 	resp := makeResponse(text)
 	p := testPlugin(true, "", 2000)
 
-	got, err, _ := p.PostLLMHook(nil, resp, nil)
+	got, err, _ := postLLMForTest(p, nil, resp)
 	if err != nil {
 		t.Fatalf("unexpected BifrostError: %v", err)
 	}
@@ -113,8 +130,8 @@ func TestBasicMode_NoteAppended(t *testing.T) {
 	if !strings.Contains(content, "[FreshnessGuard]") {
 		t.Errorf("expected FreshnessGuard note in response, got:\n%s", content)
 	}
-	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "basic" {
-		t.Errorf("expected mode=basic, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	if testResponseHeaders["X-FreshnessGuard-Mode"] != "basic" {
+		t.Errorf("expected mode=basic, got %q", testResponseHeaders["X-FreshnessGuard-Mode"])
 	}
 }
 
@@ -123,7 +140,7 @@ func TestBasicMode_NoNoteForCleanText(t *testing.T) {
 	resp := makeResponse(text)
 	p := testPlugin(true, "", 2000)
 
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	got, _, _ := postLLMForTest(p, nil, resp)
 	content := getText(got)
 	if strings.Contains(content, "[FreshnessGuard]") {
 		t.Errorf("did not expect a note for stable text, got:\n%s", content)
@@ -144,7 +161,7 @@ func TestFailOpen_SlowService(t *testing.T) {
 	resp := makeResponse(originalText)
 	p := testPlugin(false, srv.URL, 100) // 100ms timeout
 
-	got, bErr, err := p.PostLLMHook(nil, resp, nil)
+	got, bErr, err := postLLMForTest(p, nil, resp)
 	if err != nil {
 		t.Fatalf("plugin returned unexpected error: %v", err)
 	}
@@ -154,8 +171,8 @@ func TestFailOpen_SlowService(t *testing.T) {
 	if got == nil {
 		t.Fatal("FAIL OPEN: response must not be nil")
 	}
-	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "bypass" {
-		t.Errorf("FAIL OPEN: expected mode=bypass, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	if testResponseHeaders["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("FAIL OPEN: expected mode=bypass, got %q", testResponseHeaders["X-FreshnessGuard-Mode"])
 	}
 	// Original text must be untouched
 	if getText(got) != originalText {
@@ -168,9 +185,9 @@ func TestFailOpen_ServiceDown(t *testing.T) {
 	resp := makeResponse("Python 3.11 is the latest stable version.")
 	p := testPlugin(false, "http://127.0.0.1:19999", 500)
 
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
-	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "bypass" {
-		t.Errorf("expected bypass when service is down, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	_, _, _ = postLLMForTest(p, nil, resp)
+	if testResponseHeaders["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("expected bypass when service is down, got %q", testResponseHeaders["X-FreshnessGuard-Mode"])
 	}
 }
 
@@ -183,9 +200,9 @@ func TestFailOpen_Service500(t *testing.T) {
 	resp := makeResponse("Python 3.11 is the latest stable version.")
 	p := testPlugin(false, srv.URL, 2000)
 
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
-	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "bypass" {
-		t.Errorf("expected bypass for HTTP 500, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	_, _, _ = postLLMForTest(p, nil, resp)
+	if testResponseHeaders["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("expected bypass for HTTP 500, got %q", testResponseHeaders["X-FreshnessGuard-Mode"])
 	}
 }
 
@@ -214,15 +231,15 @@ func TestServiceMode_StaleResponse(t *testing.T) {
 	resp := makeResponse("GPT-4 API v1.0 costs $0.03/token.")
 	p := testPlugin(false, srv.URL, 2000)
 
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
-	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "service" {
-		t.Errorf("expected mode=service, got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	got, _, _ := postLLMForTest(p, nil, resp)
+	if testResponseHeaders["X-FreshnessGuard-Mode"] != "service" {
+		t.Errorf("expected mode=service, got %q", testResponseHeaders["X-FreshnessGuard-Mode"])
 	}
-	if got.ExtraHeaders["X-FreshnessGuard-Score"] != "0.250" {
-		t.Errorf("expected score=0.250, got %q", got.ExtraHeaders["X-FreshnessGuard-Score"])
+	if testResponseHeaders["X-FreshnessGuard-Score"] != "0.250" {
+		t.Errorf("expected score=0.250, got %q", testResponseHeaders["X-FreshnessGuard-Score"])
 	}
-	if got.ExtraHeaders["X-FreshnessGuard-Stale"] != "2" {
-		t.Errorf("expected stale=2, got %q", got.ExtraHeaders["X-FreshnessGuard-Stale"])
+	if testResponseHeaders["X-FreshnessGuard-Stale"] != "2" {
+		t.Errorf("expected stale=2, got %q", testResponseHeaders["X-FreshnessGuard-Stale"])
 	}
 	content := getText(got)
 	if !strings.Contains(content, "[FreshnessGuard]") {
@@ -244,7 +261,7 @@ func TestServiceMode_AllCurrent(t *testing.T) {
 	resp := makeResponse(text)
 	p := testPlugin(false, srv.URL, 2000)
 
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	got, _, _ := postLLMForTest(p, nil, resp)
 	// No stale claims → no note appended
 	if strings.Contains(getText(got), "[FreshnessGuard]") {
 		t.Error("unexpected note when all claims are current")
@@ -255,7 +272,7 @@ func TestServiceMode_AllCurrent(t *testing.T) {
 
 func TestNilResponse(t *testing.T) {
 	p := testPlugin(true, "", 2000)
-	got, _, err := p.PostLLMHook(nil, nil, nil)
+	got, _, err := postLLMForTest(p, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +284,7 @@ func TestNilResponse(t *testing.T) {
 func TestNilChatResponse(t *testing.T) {
 	p := testPlugin(true, "", 2000)
 	resp := &BifrostResponse{ChatResponse: nil}
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	got, _, _ := postLLMForTest(p, nil, resp)
 	if got == nil {
 		t.Fatal("expected non-nil response")
 	}
@@ -285,7 +302,7 @@ func TestNilContent(t *testing.T) {
 		},
 	}
 	// Must not panic
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	got, _, _ := postLLMForTest(p, nil, resp)
 	if got == nil {
 		t.Fatal("expected non-nil response")
 	}
@@ -296,7 +313,7 @@ func TestEmptyChoices(t *testing.T) {
 	resp := &BifrostResponse{
 		ChatResponse: &BifrostChatResponse{Choices: []BifrostResponseChoice{}},
 	}
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	got, _, _ := postLLMForTest(p, nil, resp)
 	if got == nil {
 		t.Fatal("expected non-nil response")
 	}
@@ -310,7 +327,7 @@ func TestHeadersInjected(t *testing.T) {
 	p := testPlugin(true, "", 2000)
 	p.logger = log.New(os.Stderr, "", 0) // suppress output
 
-	got, _, _ := p.PostLLMHook(nil, resp, nil)
+	_, _, _ = postLLMForTest(p, nil, resp)
 	requiredHeaders := []string{
 		"X-FreshnessGuard-Score",
 		"X-FreshnessGuard-Stale",
@@ -318,8 +335,8 @@ func TestHeadersInjected(t *testing.T) {
 		"X-FreshnessGuard-Mode",
 	}
 	for _, h := range requiredHeaders {
-		if _, ok := got.ExtraHeaders[h]; !ok {
-			t.Errorf("missing header: %s (all headers: %v)", h, got.ExtraHeaders)
+		if _, ok := testResponseHeaders[h]; !ok {
+			t.Errorf("missing header: %s (all headers: %v)", h, testResponseHeaders)
 		}
 	}
 }
@@ -405,27 +422,25 @@ func TestBypass_ContextHandling(t *testing.T) {
 	}
 
 	// Empty extra -> no bypass
-	ctxEmpty := &BifrostContext{Extra: map[string]interface{}{}}
+	ctxEmpty := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	if p.isBypass(ctxEmpty) {
 		t.Error("isBypass(empty) should be false")
 	}
 
 	// Direct bypass key
-	ctxBypass := &BifrostContext{
-		Extra: map[string]interface{}{
-			"freshnessguard-bypass": "true",
-		},
-	}
+	ctxBypass := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctxBypass.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"freshnessguard-bypass": "true",
+	})
 	if !p.isBypass(ctxBypass) {
 		t.Error("isBypass with 'freshnessguard-bypass' should be true")
 	}
 
 	// Bifrost x-bf-eh header key
-	ctxBfEh := &BifrostContext{
-		Extra: map[string]interface{}{
-			"x-bf-eh-freshnessguard-bypass": "true",
-		},
-	}
+	ctxBfEh := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctxBfEh.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"x-bf-eh-freshnessguard-bypass": "true",
+	})
 	if !p.isBypass(ctxBfEh) {
 		t.Error("isBypass with 'x-bf-eh-freshnessguard-bypass' should be true")
 	}
@@ -441,21 +456,20 @@ func TestPostLLMHook_BypassSkipsService(t *testing.T) {
 
 	p := testPlugin(false, ts.URL, 2000)
 	resp := makeResponse("GPT-4 costs $0.03 per 1K tokens")
-	ctx := &BifrostContext{
-		Extra: map[string]interface{}{
-			"x-bf-eh-freshnessguard-bypass": "true",
-		},
-	}
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"x-bf-eh-freshnessguard-bypass": "true",
+	})
 
-	got, _, err := p.PostLLMHook(ctx, resp, nil)
+	_, _, err := postLLMForTest(p, ctx, resp)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if serverCalled {
 		t.Error("expected server NOT to be called when bypass header is set")
 	}
-	if got.ExtraHeaders["X-FreshnessGuard-Mode"] != "bypass" {
-		t.Errorf("expected mode 'bypass', got %q", got.ExtraHeaders["X-FreshnessGuard-Mode"])
+	if testResponseHeaders["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("expected mode 'bypass', got %q", testResponseHeaders["X-FreshnessGuard-Mode"])
 	}
 }
 
@@ -464,7 +478,6 @@ func TestPostLLMHook_BypassSkipsService(t *testing.T) {
 func TestPostLLMHook_StreamingGraceful(t *testing.T) {
 	p := testPlugin(true, "", 2000)
 	streamingResp := &BifrostResponse{
-		Provider: "openai",
 		ChatResponse: &BifrostChatResponse{
 			Model: "gpt-4o",
 			Choices: []BifrostResponseChoice{
@@ -476,7 +489,7 @@ func TestPostLLMHook_StreamingGraceful(t *testing.T) {
 		},
 	}
 
-	got, _, err := p.PostLLMHook(nil, streamingResp, nil)
+	got, _, err := postLLMForTest(p, nil, streamingResp)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -484,4 +497,3 @@ func TestPostLLMHook_StreamingGraceful(t *testing.T) {
 		t.Fatal("response should not be nil")
 	}
 }
-

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/maximhq/bifrost/core/schemas"
 )
 
 // ─────────────────────────────────────────────────────────
@@ -126,6 +128,18 @@ func newPlugin(cfg PluginConfig) *FreshnessGuardPlugin {
 }
 
 // ─────────────────────────────────────────────────────────
+// Bifrost response metadata passed from PostLLMHook to the HTTP header hook.
+type freshnessGuardMetadataKey struct{}
+
+var freshnessGuardMetadataContextKey freshnessGuardMetadataKey
+
+type freshnessGuardMetadata struct {
+	Score     string
+	Stale     int
+	LatencyMs int64
+	Mode      string
+}
+
 // LLMPlugin interface implementation
 // ─────────────────────────────────────────────────────────
 
@@ -137,24 +151,17 @@ func (p *FreshnessGuardPlugin) isBypass(ctx *BifrostContext) bool {
 	if ctx == nil {
 		return false
 	}
-	if ctx.Extra != nil {
-		// Check direct keys mapped by Bifrost (e.g. from x-bf-eh-freshnessguard-bypass)
-		for _, k := range []string{"x-bf-eh-freshnessguard-bypass", "freshnessguard-bypass", "x-freshnessguard-bypass", "bypass"} {
-			if val, ok := ctx.Extra[k]; ok {
-				if s := fmt.Sprint(val); s == "true" || s == "1" {
-					return true
-				}
-			}
-		}
-		// Check nested headers map if present
-		if headersMap, ok := ctx.Extra["headers"].(map[string]interface{}); ok {
-			for _, k := range []string{"x-bf-eh-freshnessguard-bypass", "freshnessguard-bypass", "x-freshnessguard-bypass"} {
-				if val, ok := headersMap[k]; ok {
-					if s := fmt.Sprint(val); s == "true" || s == "1" {
-						return true
-					}
-				}
-			}
+
+	headers, _ := ctx.Value(schemas.BifrostContextKeyRequestHeaders).(map[string]string)
+	for _, key := range []string{
+		"x-bf-eh-freshnessguard-bypass",
+		"freshnessguard-bypass",
+		"x-freshnessguard-bypass",
+		"bypass",
+	} {
+		value := strings.ToLower(strings.TrimSpace(headers[key]))
+		if value == "true" || value == "1" {
+			return true
 		}
 	}
 	return false
@@ -185,7 +192,7 @@ func (p *FreshnessGuardPlugin) PostLLMHook(ctx *BifrostContext, resp *BifrostRes
 	// Internal recursion bypass check
 	if p.isBypass(ctx) {
 		p.logger.Println("Internal recursion bypass detected in PostLLMHook — passing through untouched")
-		p.injectHeaders(resp, "1.000", 0, 0, "bypass")
+		p.injectHeaders(ctx, "1.000", 0, 0, "bypass")
 		return resp, e, nil
 	}
 
@@ -204,7 +211,7 @@ func (p *FreshnessGuardPlugin) PostLLMHook(ctx *BifrostContext, resp *BifrostRes
 	start := time.Now()
 
 	if p.cfg.BasicMode || p.cfg.ServiceURL == "" {
-		return p.runBasicMode(resp, text, start)
+		return p.runBasicMode(ctx, resp, text, start)
 	}
 	return p.runServiceMode(ctx, resp, text, start)
 }
@@ -213,7 +220,7 @@ func (p *FreshnessGuardPlugin) PostLLMHook(ctx *BifrostContext, resp *BifrostRes
 // Basic Mode (regex, no network)
 // ─────────────────────────────────────────────────────────
 
-func (p *FreshnessGuardPlugin) runBasicMode(resp *BifrostResponse, text string, start time.Time) (*BifrostResponse, *BifrostError, error) {
+func (p *FreshnessGuardPlugin) runBasicMode(ctx *BifrostContext, resp *BifrostResponse, text string, start time.Time) (*BifrostResponse, *BifrostError, error) {
 	claims := extractBasicClaims(text)
 
 	staleCount := 0
@@ -229,7 +236,7 @@ func (p *FreshnessGuardPlugin) runBasicMode(resp *BifrostResponse, text string, 
 	}
 
 	latencyMs := time.Since(start).Milliseconds()
-	p.injectHeaders(resp, fmt.Sprintf("%.3f", freshness), staleCount, latencyMs, "basic")
+	p.injectHeaders(ctx, fmt.Sprintf("%.3f", freshness), staleCount, latencyMs, "basic")
 
 	if staleCount > 0 && p.cfg.InjectNote {
 		note := buildBasicNote(freshness, staleCount, len(claims), claims)
@@ -293,7 +300,9 @@ func buildBasicNote(freshness float64, staleCount, total int, claims []BasicClai
 func (p *FreshnessGuardPlugin) runServiceMode(ctx *BifrostContext, resp *BifrostResponse, text string, start time.Time) (*BifrostResponse, *BifrostError, error) {
 	requestID := ""
 	if ctx != nil {
-		requestID = ctx.RequestID
+		if value := ctx.Value(schemas.BifrostContextKeyRequestID); value != nil {
+			requestID, _ = value.(string)
+		}
 	}
 
 	payload := ServiceRequest{
@@ -305,7 +314,7 @@ func (p *FreshnessGuardPlugin) runServiceMode(ctx *BifrostContext, resp *Bifrost
 	body, err := json.Marshal(payload)
 	if err != nil {
 		p.logger.Printf("FAIL OPEN: marshal error: %v", err)
-		return p.failOpen(resp)
+		return p.failOpen(ctx, resp)
 	}
 
 	reqCtx, cancel := context.WithTimeout(context.Background(), time.Duration(p.cfg.TimeoutMs)*time.Millisecond)
@@ -314,7 +323,7 @@ func (p *FreshnessGuardPlugin) runServiceMode(ctx *BifrostContext, resp *Bifrost
 	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, p.cfg.ServiceURL+"/api/check", bytes.NewReader(body))
 	if err != nil {
 		p.logger.Printf("FAIL OPEN: build request error: %v", err)
-		return p.failOpen(resp)
+		return p.failOpen(ctx, resp)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	if p.cfg.ApiKey != "" {
@@ -324,23 +333,23 @@ func (p *FreshnessGuardPlugin) runServiceMode(ctx *BifrostContext, resp *Bifrost
 	httpResp, err := p.client.Do(httpReq)
 	if err != nil {
 		p.logger.Printf("FAIL OPEN: service unreachable (%v)", err)
-		return p.failOpen(resp)
+		return p.failOpen(ctx, resp)
 	}
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode >= 500 {
 		p.logger.Printf("FAIL OPEN: service returned HTTP %d", httpResp.StatusCode)
-		return p.failOpen(resp)
+		return p.failOpen(ctx, resp)
 	}
 
 	var svcResp ServiceResponse
 	if err := json.NewDecoder(httpResp.Body).Decode(&svcResp); err != nil {
 		p.logger.Printf("FAIL OPEN: decode error: %v", err)
-		return p.failOpen(resp)
+		return p.failOpen(ctx, resp)
 	}
 
 	latencyMs := time.Since(start).Milliseconds()
-	p.injectHeaders(resp, fmt.Sprintf("%.3f", svcResp.OverallScore), svcResp.StaleCount, latencyMs, "service")
+	p.injectHeaders(ctx, fmt.Sprintf("%.3f", svcResp.OverallScore), svcResp.StaleCount, latencyMs, "service")
 
 	if svcResp.StaleCount > 0 && p.cfg.InjectNote {
 		note := buildServiceNote(svcResp)
@@ -371,8 +380,8 @@ func buildServiceNote(s ServiceResponse) string {
 	return sb.String()
 }
 
-func (p *FreshnessGuardPlugin) failOpen(resp *BifrostResponse) (*BifrostResponse, *BifrostError, error) {
-	p.injectHeaders(resp, "1.000", 0, 0, "bypass")
+func (p *FreshnessGuardPlugin) failOpen(ctx *BifrostContext, resp *BifrostResponse) (*BifrostResponse, *BifrostError, error) {
+	p.injectHeaders(ctx, "1.000", 0, 0, "bypass")
 	return resp, nil, nil
 }
 
@@ -380,17 +389,41 @@ func (p *FreshnessGuardPlugin) failOpen(resp *BifrostResponse) (*BifrostResponse
 // Header injection
 // ─────────────────────────────────────────────────────────
 
-func (p *FreshnessGuardPlugin) injectHeaders(resp *BifrostResponse, score string, stale int, latencyMs int64, mode string) {
-	if resp.ExtraHeaders == nil {
-		resp.ExtraHeaders = make(map[string]string)
+func (p *FreshnessGuardPlugin) injectHeaders(ctx *BifrostContext, score string, stale int, latencyMs int64, mode string) {
+	if ctx != nil {
+		ctx.SetValue(freshnessGuardMetadataContextKey, freshnessGuardMetadata{
+			Score:     score,
+			Stale:     stale,
+			LatencyMs: latencyMs,
+			Mode:      mode,
+		})
 	}
-	resp.ExtraHeaders["X-FreshnessGuard-Score"] = score
-	resp.ExtraHeaders["X-FreshnessGuard-Stale"] = strconv.Itoa(stale)
-	resp.ExtraHeaders["X-FreshnessGuard-Latency"] = fmt.Sprintf("%dms", latencyMs)
-	resp.ExtraHeaders["X-FreshnessGuard-Mode"] = mode
 
-	// Log headers (never log keys or secrets)
+	// Log headers (never log keys or secrets).
 	p.logger.Printf("Score=%s Stale=%d Latency=%dms Mode=%s", score, stale, latencyMs, mode)
+}
+
+// HTTPTransportResponseHeadersHook applies FreshnessGuard metadata to the
+// actual HTTP response after Bifrost has finalized the response.
+func HTTPTransportResponseHeadersHookImpl(
+	ctx *schemas.BifrostContext,
+	_ *schemas.HTTPRequest,
+	resp *schemas.HTTPResponseMetadata,
+) error {
+	if ctx == nil || resp == nil {
+		return nil
+	}
+
+	metadata, ok := ctx.Value(freshnessGuardMetadataContextKey).(freshnessGuardMetadata)
+	if !ok {
+		return nil
+	}
+
+	resp.SetHeader("X-FreshnessGuard-Score", metadata.Score)
+	resp.SetHeader("X-FreshnessGuard-Stale", strconv.Itoa(metadata.Stale))
+	resp.SetHeader("X-FreshnessGuard-Latency", fmt.Sprintf("%dms", metadata.LatencyMs))
+	resp.SetHeader("X-FreshnessGuard-Mode", metadata.Mode)
+	return nil
 }
 
 // ─────────────────────────────────────────────────────────
@@ -460,6 +493,14 @@ func PreLLMHook(ctx *BifrostContext, req *BifrostRequest) (*BifrostRequest, *LLM
 
 func PostLLMHook(ctx *BifrostContext, resp *BifrostResponse, e *BifrostError) (*BifrostResponse, *BifrostError, error) {
 	return pluginInstance.PostLLMHook(ctx, resp, e)
+}
+
+func HTTPTransportResponseHeadersHook(
+	ctx *schemas.BifrostContext,
+	req *schemas.HTTPRequest,
+	resp *schemas.HTTPResponseMetadata,
+) error {
+	return HTTPTransportResponseHeadersHookImpl(ctx, req, resp)
 }
 
 func main() {

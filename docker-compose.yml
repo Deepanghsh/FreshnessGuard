@@ -84,6 +84,7 @@ services:
       - ./plugins:/app/plugins
     environment:
       - BIFROST_CONFIG_PATH=/app/config/config.json
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - BIFROST_ENCRYPTION_KEY=${BIFROST_ENCRYPTION_KEY:-freshnessguardsecretkey1234567890}
     depends_on:
       server:
