@@ -52,7 +52,7 @@ This project combines two competitive tracks into a single unified submission fo
 | Challenge Track | Alignment & Implementation |
 |---|---|
 | **Primary: Bifrost PS 04** (*A feature the open-source gateway is missing*) | Built directly as a native Go `PostLLMHook` plugin implementing Bifrost's `schemas.LLMPlugin` interface. Injects `X-FreshnessGuard-Score`, `X-FreshnessGuard-Stale`, and `X-FreshnessGuard-Latency` headers. Enforces strict **Fail-Open** semantics so the gateway never drops a request. |
-| **Specialized: Tavily PS 01** (*Stale-Answer Detector*) | Complete end-to-end temporal verification engine powered by the official `@tavily/core` SDK. Features query optimization, official domain boosting (`docs.*`, `*.gov`), recency filtering, and mathematical multi-source consensus scoring. |
+| **Specialized: Tavily PS 01** (*Stale-Answer Detector*) | Complete end-to-end temporal verification engine powered by the official `@tavily/core` SDK. Features query optimization, official-domain recognition (`*.gov`, `*.mil`, and a curated domain allowlist), claim-relevance filtering, recency analysis, and mathematical multi-source scoring. |
 
 ---
 
@@ -156,13 +156,15 @@ Every extracted claim is assigned a normalized score between `0.00` and `1.00` b
 $$\text{ClaimScore} = (E_{\text{agreement}} \times 0.40) + (S_{\text{authority}} \times 0.30) + (R_{\text{recency}} \times 0.20) + (C_{\text{count}} \times 0.10)$$
 
 Where:
-- **$E_{\text{agreement}}$ (Weight: 0.40)**: Proportion of retrieved search snippets that directly corroborate the extracted value.
-- **$S_{\text{authority}}$ (Weight: 0.30)**: Domain reputation score. Official documentation (`docs.*`), `.gov`, and `.edu` domains receive a 0.85 base multiplier; mainstream verified news receives 0.45, blended with Tavily snippet relevance.
+- **$E_{\text{agreement}}$ (Weight: 0.40)**: Verdict-based evidence agreement: current = 1.00, unverified = 0.50, and stale = 0.00.
+- **$S_{\text{authority}}$ (Weight: 0.30)**: Domain reputation score. Recognized official domains receive a 0.85 base authority; other domains receive 0.45. Both are blended 70/30 with Tavily's relevance score.
 - **$R_{\text{recency}}$ (Weight: 0.20)**: Time-decay function:
-  - $\le 7\text{ days}$: `1.00`
-  - $\le 30\text{ days}$: `0.80`
-  - $\le 90\text{ days}$: `0.60`
-  - $> 90\text{ days}$ or undated: `0.40`
+  - $< 7\text{ days}$: `1.00`
+  - $< 30\text{ days}$: `0.75`
+  - $< 90\text{ days}$: `0.50`
+  - $\ge 90\text{ days}$: `0.15`
+  - Missing or invalid dates: `0.20`
+  - Future dates: `0.30`
 - **$C_{\text{count}}$ (Weight: 0.10)**: Diminishing returns scaling on independent verifying sources: $\min(1.0, \frac{N_{\text{sources}}}{3})$.
 
 ### Safety Bounds & Caps
