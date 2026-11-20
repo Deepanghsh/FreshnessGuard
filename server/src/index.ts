@@ -42,9 +42,15 @@ app.use(cors({
     // Allow non-browser requests (no origin header, e.g. curl, tests, server-to-server)
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       callback(null, true);
-    } else {
-      callback(new Error('Blocked by CORS policy'));
+      return;
     }
+    // Allow localhost and 127.0.0.1 on any dev port when localhost is configured in allowedOrigins or in dev
+    const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    if (isLocalhost && (process.env.NODE_ENV !== 'production' || allowedOrigins.some(o => o.includes('localhost') || o.includes('127.0.0.1')))) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Blocked by CORS policy'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-FreshnessGuard-Key'],

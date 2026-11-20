@@ -37,7 +37,7 @@ services:
       - FRESHNESSGUARD_MODE=${FRESHNESSGUARD_MODE:-inline}
       - LLM_MODEL=${LLM_MODEL:-gemini-3.1-flash-lite}
       - BIFROST_URL=${BIFROST_URL:-http://bifrost:8080}
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:80,http://client:80
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://localhost:80,http://client:80
       - RATE_LIMIT_WINDOW_MS=60000
       - RATE_LIMIT_MAX=100
     depends_on:
