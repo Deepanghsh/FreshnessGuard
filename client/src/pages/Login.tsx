@@ -79,7 +79,8 @@ export default function Login() {
       return;
     }
     // Direct browser redirect to Google OAuth authorization endpoint
-    window.location.href = '/api/auth/google';
+    const backendBase = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.replace(/\/$/, '') || '';
+    window.location.href = `${backendBase}/api/auth/google`;
   };
 
   const handleQuickDemo = async () => {

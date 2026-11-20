@@ -80,7 +80,8 @@ export default function Register() {
       );
       return;
     }
-    window.location.href = '/api/auth/google';
+    const backendBase = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.replace(/\/$/, '') || '';
+    window.location.href = `${backendBase}/api/auth/google`;
   };
 
   const handleQuickDemo = async () => {

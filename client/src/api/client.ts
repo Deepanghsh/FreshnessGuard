@@ -1,6 +1,10 @@
 import type { ResponseDoc, StatsData, PaginatedResponses, HealthStatus, Mode, SSEEvent, User, AuthResponse } from '../types';
 
-const BASE = '';
+const BASE = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.replace(/\/$/, '') || '';
+
+export function getBackendBase(): string {
+  return BASE;
+}
 
 export function getStoredToken(): string | null {
   try {
@@ -180,7 +184,7 @@ export function subscribeToEvents(onMessage: SSECallback): () => void {
   function connect() {
     if (isClosed) return;
     try {
-      es = new EventSource('/api/events');
+      es = new EventSource(`${BASE}/api/events`);
 
       const handleRaw = (type: string, rawData: string) => {
         try {
