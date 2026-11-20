@@ -7,7 +7,7 @@
 | Docker | 24+ | Required for containerised deployment |
 | Docker Compose | v2.x | Included with Docker Desktop |
 | Tavily API key | — | **Required** for live claim verification |
-| OpenAI API key | — | Optional — regex fallback activates automatically if omitted |
+| Google Gemini API key | — | Optional — regex fallback activates automatically if omitted |
 
 > **Linux requirement for plugin build:** The Bifrost plugin (`.so` file) must be compiled on Linux. The `plugin-builder` Docker Compose profile handles this automatically. Building the plugin directly on macOS or Windows is not supported by Go's `plugin` build mode.
 
@@ -27,15 +27,14 @@ cp .env.example .env
 |----------|----------|-------------------|-------------|
 | `PORT` | ❌ | `3001` | Port the server listens on |
 | `NODE_ENV` | ❌ | `production` | Node environment |
-| `LLM_MODEL` | ❌ | `gpt-4o-mini` | Default LLM model for claim extraction |
+| `LLM_MODEL` | ❌ | `gemini-3.1-flash-lite` | Default LLM model for claim extraction |
 | `CORS_ORIGINS` | ❌ | `http://localhost:5173,...` | Comma-separated allowed CORS origins |
 | `FRESHNESSGUARD_MODE` | ❌ | `inline` | Default processing mode (`inline`\|`async`\|`basic`\|`bypass`) |
 | `FRESHNESSGUARD_API_KEY` | ❌ | *(empty)* | Optional API key enforcing auth on POST /api/check and /api/verify/:id |
 | `MONGODB_URI` | ❌ | `mongodb://mongodb:27017/freshnessguard` | MongoDB connection string |
 | `TAVILY_API_KEY` | ✅ | `tvly-your-key-here` | Tavily search API key |
-| `OPENAI_API_KEY` | ❌ | `sk-your-key-here` | OpenAI API key (regex fallback if omitted) |
-| `OPENAI_BASE_URL` | ❌ | `https://api.openai.com/v1` | Override for custom OpenAI-compatible endpoints |
-| `BIFROST_HOST` | ❌ | `http://bifrost:8080` | Internal Bifrost base URL |
+| `GEMINI_API_KEY` | ❌ | `your-gemini-key` | Google Gemini API key (sole LLM provider, regex fallback if omitted) |
+| `BIFROST_URL` | ❌ | `http://bifrost:8080` | Internal Bifrost base URL |
 | `BIFROST_ENCRYPTION_KEY` | ❌ | *(placeholder)* | Encryption key for Bifrost at-rest secrets |
 | `RATE_LIMIT_WINDOW_MS` | ❌ | `60000` | Rate-limit window in milliseconds |
 | `RATE_LIMIT_MAX` | ❌ | `100` | Maximum requests per window across all /api routes |
@@ -206,9 +205,9 @@ docker compose exec server wget -qO- http://localhost:3001/healthz
 > 2. The Go version of the builder matches Bifrost's Go runtime exactly (`1.27.3`).
 > 3. The plugin was built on a Linux host or via the Docker builder.
 
-### OpenAI rate limit (429)
+### Gemini rate limit or network error
 
-No action required. FreshnessGuard automatically falls back to its built-in regex extractor when OpenAI returns a 429 or is unavailable.
+No action required. FreshnessGuard automatically falls back to its built-in deterministic regex extractor when Google Gemini is rate-limited or unavailable.
 
 ### Tavily rate limit
 
@@ -246,5 +245,5 @@ Persistence failures are logged at `warn` level and do **not** surface as errors
 |------------|--------|
 | Docker deployment not tested | No Docker daemon was available during development; the Compose configuration is based on the service definitions but has not been run end-to-end. |
 | Bifrost plugin loading not live-tested | The `.so` build process is validated via the builder image, but actual plugin load-and-dispatch through Bifrost has not been verified live. |
-| Live OpenAI integration | The LLM extraction path works via mock in tests; live OpenAI calls have not been exercised in this environment. |
+| Live Gemini extraction | The LLM extraction path works via mock in tests; live Gemini calls require a configured GEMINI_API_KEY. |
 | Live evaluation script | The evaluation harness exists but has not been run against a live deployment. |

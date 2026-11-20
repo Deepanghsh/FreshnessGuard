@@ -188,17 +188,18 @@ describe('calculateConfidence', () => {
 
 // ─── calculateOverallConfidence ───────────────────────────────────────────────
 describe('calculateOverallConfidence', () => {
-  it('returns 1.0 for empty claims (fully confident no verification needed)', () => {
-    expect(calculateOverallConfidence([])).toBe(1.0);
+  it('returns null for zero claims (no claims to evaluate, avoids misleading 100% confidence)', () => {
+    expect(calculateOverallConfidence([])).toBeNull();
   });
 
-  it('weights confidence by likelihood', () => {
+  it('weights confidence by likelihood for non-empty claim sets', () => {
     const claims: ScoredClaim[] = [
       { ...baseClaim, id: '1', likelihood: 0.9, score: 0.9, verdict: 'current', confidence: 0.9 },
       { ...baseClaim, id: '2', likelihood: 0.3, score: 0.0, verdict: 'unverified', confidence: 0.15, category: 'fact', extractedValue: 'x' },
     ];
     const overall = calculateOverallConfidence(claims);
-    expect(overall).toBeGreaterThan(0.60);
+    expect(overall).not.toBeNull();
+    expect(overall!).toBeGreaterThan(0.60);
   });
 });
 
@@ -298,5 +299,287 @@ describe('buildCorrectedAnswer', () => {
     const corrected = buildCorrectedAnswer('Use SDK v1.0 at $9.99/mo.', claims);
     expect(corrected).toContain('v3.0');
     expect(corrected).toContain('$14.99');
+  });
+
+  describe('Safe In-Place Replacement & Consistency Regressions', () => {
+    it('replaces target price in a bullet point without affecting identical numbers elsewhere', () => {
+      const original = `Netflix Pricing Overview:
+- Standard with Ads: $6.99 per month
+- Standard: $15.49 per month
+- Premium: $22.99 per month
+
+Historical note: In 2015, the old plan cost $15.49 before restructuring.`;
+
+      const claims: ScoredClaim[] = [
+        {
+          id: 'claim-standard',
+          text: 'Standard: $15.49 per month',
+          category: 'pricing',
+          extractedValue: '$15.49',
+          tier: 'Standard',
+          entity: 'Netflix',
+          verdict: 'stale',
+          liveValue: '$17.99',
+          score: 0.15,
+          likelihood: 0.95,
+        },
+      ];
+
+      const corrected = buildCorrectedAnswer(original, claims);
+      // The current Standard bullet must be updated
+      expect(corrected).toContain('- Standard: $17.99 *(updated)* per month');
+      // The historical paragraph must remain completely untouched
+      expect(corrected).toContain('Historical note: In 2015, the old plan cost $15.49 before restructuring.');
+      // Other bullets must remain untouched
+      expect(corrected).toContain('- Standard with Ads: $6.99 per month');
+      expect(corrected).toContain('- Premium: $22.99 per month');
+    });
+
+    it('does not replace values for UNVERIFIED claims', () => {
+      const original = 'Netflix Standard in Iceland is $12.99 per month.';
+      const claims: ScoredClaim[] = [
+        {
+          id: 'claim-unverified',
+          text: 'Netflix Standard in Iceland is $12.99 per month.',
+          category: 'pricing',
+          extractedValue: '$12.99',
+          tier: 'Standard',
+          entity: 'Netflix',
+          verdict: 'unverified',
+          score: 0.50,
+          likelihood: 0.95,
+        },
+      ];
+
+      const corrected = buildCorrectedAnswer(original, claims);
+      expect(corrected).toBe(original);
+    });
+
+    it('ensures summaryStatus and correctedAnswer never contradict', () => {
+      const unverifiedClaims: ScoredClaim[] = [
+        {
+          id: 'u1',
+          text: 'Some disputed claim',
+          category: 'fact',
+          extractedValue: 'disputed',
+          verdict: 'unverified',
+          score: 0.50,
+          likelihood: 0.8,
+        },
+      ];
+      const summaryUnverified = getResponseSummary(1, 0, 1, 'inline');
+      expect(summaryUnverified.summaryStatus).toBe('unverified');
+      const correctedUnverified = buildCorrectedAnswer('Some disputed claim', unverifiedClaims);
+      // No corrections applied when unverified
+      expect(correctedUnverified).toBe('Some disputed claim');
+
+      const staleClaims: ScoredClaim[] = [
+        {
+          id: 's1',
+          text: 'Twitter CEO is Parag Agrawal',
+          category: 'leadership',
+          extractedValue: 'Parag Agrawal',
+          liveValue: 'Linda Yaccarino',
+          verdict: 'stale',
+          score: 0.15,
+          likelihood: 0.9,
+        },
+      ];
+      const summaryStale = getResponseSummary(1, 1, 0, 'inline');
+      expect(summaryStale.summaryStatus).toBe('stale_detected');
+      const correctedStale = buildCorrectedAnswer('Twitter CEO is Parag Agrawal', staleClaims);
+      expect(correctedStale).toContain('Linda Yaccarino *(updated)*');
+    });
+
+    it('preserves valid $7.99 and $9.99 extra-member prices and $11.99 retired basic plan when other tiers are corrected', () => {
+      const original = `Netflix Pricing in the US:
+* Standard with Ads: $6.99 per month
+* Standard: $15.49 per month
+  - Option to add one "extra member" for an additional $7.99/month.
+  - Option to add an ad-free extra member for $9.99/month.
+* Premium: $22.99 per month
+* Basic Plan (Discontinued): Netflix has officially retired its $11.99/month Basic plan.`;
+
+      const claims: ScoredClaim[] = [
+        {
+          id: 'claim-ads',
+          text: 'Standard with Ads: $6.99 per month',
+          category: 'pricing',
+          extractedValue: '$6.99',
+          tier: 'Standard with Ads',
+          verdict: 'stale',
+          liveValue: '$8.99',
+          score: 0.28,
+          likelihood: 0.95,
+        },
+        {
+          id: 'claim-std',
+          text: 'Standard: $15.49 per month',
+          category: 'pricing',
+          extractedValue: '$15.49',
+          tier: 'Standard',
+          verdict: 'stale',
+          liveValue: '$19.99',
+          score: 0.31,
+          likelihood: 0.95,
+        },
+        {
+          id: 'claim-extra-799',
+          text: 'Option to add one "extra member" for an additional $7.99/month.',
+          category: 'pricing',
+          extractedValue: '$7.99',
+          tier: 'Extra Member',
+          attribute: 'Extra member add-on price',
+          verdict: 'current',
+          score: 0.85,
+          likelihood: 0.95,
+        },
+        {
+          id: 'claim-extra-999',
+          text: 'Option to add an ad-free extra member for $9.99/month.',
+          category: 'pricing',
+          extractedValue: '$9.99',
+          tier: 'Extra Member',
+          attribute: 'Extra member add-on price',
+          verdict: 'current',
+          score: 0.85,
+          likelihood: 0.95,
+        },
+        {
+          id: 'claim-prem',
+          text: 'Premium: $22.99 per month',
+          category: 'pricing',
+          extractedValue: '$22.99',
+          tier: 'Premium',
+          verdict: 'stale',
+          liveValue: '$26.99',
+          score: 0.31,
+          likelihood: 0.95,
+        },
+        {
+          id: 'claim-basic',
+          text: 'Basic Plan (Discontinued): Netflix has officially retired its $11.99/month Basic plan.',
+          category: 'pricing',
+          extractedValue: '$11.99',
+          tier: 'Basic',
+          attribute: 'Discontinued plan price',
+          timePeriod: 'historical',
+          verdict: 'current',
+          score: 0.85,
+          likelihood: 0.95,
+        },
+      ];
+
+      const corrected = buildCorrectedAnswer(original, claims);
+
+      // Verified stale subscription tiers should be updated
+      expect(corrected).toContain('* Standard with Ads: $8.99 *(updated)* per month');
+      expect(corrected).toContain('* Standard: $19.99 *(updated)* per month');
+      expect(corrected).toContain('* Premium: $26.99 *(updated)* per month');
+
+      // Valid extra member and retired Basic plan prices MUST remain untouched
+      expect(corrected).toContain('- Option to add one "extra member" for an additional $7.99/month.');
+      expect(corrected).toContain('- Option to add an ad-free extra member for $9.99/month.');
+      expect(corrected).toContain('* Basic Plan (Discontinued): Netflix has officially retired its $11.99/month Basic plan.');
+
+      // Standard price $19.99 must NEVER appear in the extra member or basic lines
+      expect(corrected).not.toContain('extra member" for an additional $19.99');
+      expect(corrected).not.toContain('retired its $19.99/month Basic plan');
+    });
+
+    it('corrects exact occurrences when base plans contain extra-member eligibility sentences', () => {
+      const original = `Netflix US subscription plans:
+* Standard with Ads ($6.99/month): Ad-supported streaming.
+* Standard Plan ($15.49/month): You can add one extra member.
+* Premium Plan ($22.99/month): You can add up to two extra members.
+* Extra member slot costs $7.99/month.`;
+
+      const claims: ScoredClaim[] = [
+        {
+          id: 'c1',
+          text: '* Standard with Ads ($6.99/month): Ad-supported streaming.',
+          category: 'pricing',
+          extractedValue: '$6.99',
+          tier: 'Standard with Ads',
+          verdict: 'stale',
+          liveValue: '$8.99',
+          score: 0.25,
+          likelihood: 0.95,
+        },
+        {
+          id: 'c2',
+          text: '* Standard Plan ($15.49/month): You can add one extra member.',
+          category: 'pricing',
+          extractedValue: '$15.49',
+          tier: 'Standard',
+          verdict: 'stale',
+          liveValue: '$19.99',
+          score: 0.25,
+          likelihood: 0.95,
+        },
+        {
+          id: 'c3',
+          text: '* Premium Plan ($22.99/month): You can add up to two extra members.',
+          category: 'pricing',
+          extractedValue: '$22.99',
+          tier: 'Premium',
+          verdict: 'stale',
+          liveValue: '$26.99',
+          score: 0.25,
+          likelihood: 0.95,
+        },
+        {
+          id: 'c4',
+          text: '* Extra member slot costs $7.99/month.',
+          category: 'pricing',
+          extractedValue: '$7.99',
+          tier: 'Extra Member',
+          verdict: 'current',
+          score: 0.85,
+          likelihood: 0.95,
+        },
+      ];
+
+      const corrected = buildCorrectedAnswer(original, claims);
+      expect(corrected).toContain('* Standard with Ads ($8.99 *(updated)*/month): Ad-supported streaming.');
+      expect(corrected).toContain('* Standard Plan ($19.99 *(updated)*/month): You can add one extra member.');
+      expect(corrected).toContain('* Premium Plan ($26.99 *(updated)*/month): You can add up to two extra members.');
+      expect(corrected).toContain('* Extra member slot costs $7.99/month.');
+      expect(corrected).not.toContain('$7.99 *(updated)*');
+    });
+
+    it('safety guard blocks replacing a base plan price with an add-on fee ($7.99 or $9.99)', () => {
+      const original = '* Standard Plan ($15.49/month): You can add one extra member.';
+      const corruptedClaim: ScoredClaim = {
+        id: 'corrupt',
+        text: '* Standard Plan ($15.49/month): You can add one extra member.',
+        category: 'pricing',
+        extractedValue: '$15.49',
+        tier: 'Standard',
+        verdict: 'stale',
+        liveValue: '$7.99', // Malformed liveValue from tier confusion
+        score: 0.2,
+        likelihood: 0.95,
+      };
+      const corrected = buildCorrectedAnswer(original, [corruptedClaim]);
+      expect(corrected).toBe(original); // Untouched!
+    });
+
+    it('safety guard blocks replacing Standard ad-free price with Standard with Ads price ($8.99)', () => {
+      const original = '* Standard Plan ($15.49/month): Ad-free HD streaming.';
+      const corruptedClaim: ScoredClaim = {
+        id: 'corrupt-ads',
+        text: '* Standard Plan ($15.49/month): Ad-free HD streaming.',
+        category: 'pricing',
+        extractedValue: '$15.49',
+        tier: 'Standard',
+        verdict: 'stale',
+        liveValue: '$8.99', // Malformed collision with with-ads price
+        score: 0.2,
+        likelihood: 0.95,
+      };
+      const corrected = buildCorrectedAnswer(original, [corruptedClaim]);
+      expect(corrected).toBe(original); // Untouched!
+    });
   });
 });

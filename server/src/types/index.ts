@@ -1,5 +1,5 @@
 export type ClaimCategory = 'pricing' | 'version' | 'date' | 'law' | 'leadership' | 'fact';
-export type Verdict = 'current' | 'stale' | 'unverified';
+export type Verdict = 'current' | 'stale' | 'false' | 'unverified';
 export type Mode = 'inline' | 'async' | 'basic' | 'bypass';
 export type SummaryStatus = 'no_claims' | 'all_fresh' | 'stale_detected' | 'unverified' | 'bypassed';
 
@@ -11,6 +11,7 @@ export interface Source {
   isOfficial?: boolean;
   content?: string;
   score?: number;
+  reliability?: 'high' | 'medium' | 'low';
 }
 
 export interface Claim {
@@ -26,6 +27,14 @@ export interface Claim {
   confidence?: number;
   checkedAt?: Date;
   correctedText?: string;
+  entity?: string;
+  product?: string;
+  attribute?: string;
+  unit?: string;
+  region?: string;
+  tier?: string;
+  timePeriod?: string;
+  enclosingSentence?: string;
 }
 
 export interface ExtractionResult {
@@ -67,7 +76,7 @@ export interface CheckResponse {
   checkedAt: Date;
   claims: ScoredClaim[];
   overallScore: number;
-  overallConfidence?: number;
+  overallConfidence?: number | null;
   summaryStatus: SummaryStatus;
   summaryMessage: string;
   staleCount: number;

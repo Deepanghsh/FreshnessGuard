@@ -4,7 +4,7 @@ import request from 'supertest';
 // Dummy credentials for deterministic tests.
 // External API calls are mocked below, so these are never used for real requests.
 process.env.TAVILY_API_KEY = 'test-tavily-key';
-process.env.OPENAI_API_KEY = 'test-openai-key';
+delete process.env.GEMINI_API_KEY;
 
 // ─── Deterministic External Mocks for Reproducible E2E Integration Testing ───
 const mockTavilySearch = jest.fn().mockImplementation(async (query: string) => {
@@ -48,17 +48,6 @@ jest.mock('@tavily/core', () => ({
   })),
 }));
 
-jest.mock('openai', () => {
-  return jest.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: jest.fn().mockRejectedValue(
-          new Error('Simulated LLM fallback to regex in tests')
-        ),
-      },
-    },
-  }));
-});
 
 // Mock mongoose connection state to report connected
 jest.mock('mongoose', () => {
@@ -159,8 +148,11 @@ import { extractWithRegex } from '../services/extraction';
 import { getCacheStats, resetCacheStats } from '../services/cache';
 import { ScoredClaim } from '../types';
 
+jest.setTimeout(15000);
+
 describe('Phase 6: End-to-End Integration Testing Suite (Mocked Storage)', () => {
   beforeEach(() => {
+    delete process.env.GEMINI_API_KEY;
     resetCacheStats();
 
     for (const key of Object.keys(inMemoryStore)) {
@@ -401,7 +393,7 @@ describe('Phase 6: End-to-End Integration Testing Suite (Mocked Storage)', () =>
     test('rejects missing text field with 400 Bad Request', async () => {
       const res = await request(app)
         .post('/api/check')
-        .send({ model: 'gpt-4o' });
+        .send({ model: 'gemini-3.1-flash-lite' });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBeDefined();

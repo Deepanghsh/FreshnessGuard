@@ -44,8 +44,8 @@ async function runEvaluation() {
     try {
       const response = await fetch(`${SERVER_URL}/api/check`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: item.text, model: 'gpt-4o-mini' }),
+        headers: { 'Content-Type': 'application/json', 'X-No-Cache': 'true' },
+        body: JSON.stringify({ text: item.text, model: 'gemini-3.1-flash-lite', noCache: true }),
       });
 
       const elapsed = Date.now() - start;

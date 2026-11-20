@@ -1,0 +1,336 @@
+{
+  "evaluatedAt": "2026-11-18T09:26:00.771Z",
+  "metrics": {
+    "accuracy": 0.5142857142857142,
+    "precision": 0.46153846153846156,
+    "recall": 0.375,
+    "f1": 0.41379310344827586,
+    "avgLatency": 3297.6,
+    "p50": 3491,
+    "p95": 9778
+  },
+  "counts": {
+    "total": 35,
+    "truePositives": 6,
+    "falsePositives": 7,
+    "trueNegatives": 12,
+    "falseNegatives": 10
+  },
+  "results": [
+    {
+      "id": "eval-01",
+      "category": "pricing",
+      "expected": "stale",
+      "actual": "current",
+      "score": 0.67003655364,
+      "latencyMs": 70,
+      "correct": false
+    },
+    {
+      "id": "eval-02",
+      "category": "pricing",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.67451511168,
+      "latencyMs": 15,
+      "correct": true
+    },
+    {
+      "id": "eval-03",
+      "category": "pricing",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.6766669044900001,
+      "latencyMs": 18,
+      "correct": true
+    },
+    {
+      "id": "eval-04",
+      "category": "pricing",
+      "expected": "stale",
+      "actual": "current",
+      "score": 1,
+      "latencyMs": 14,
+      "correct": false
+    },
+    {
+      "id": "eval-05",
+      "category": "pricing",
+      "expected": "stale",
+      "actual": "stale",
+      "score": 0.2948794974248,
+      "latencyMs": 11,
+      "correct": true
+    },
+    {
+      "id": "eval-06",
+      "category": "pricing",
+      "expected": "current",
+      "actual": "stale",
+      "score": 0.29173863308000003,
+      "latencyMs": 10,
+      "correct": false
+    },
+    {
+      "id": "eval-07",
+      "category": "pricing",
+      "expected": "stale",
+      "actual": "stale",
+      "score": 0.284833532741,
+      "latencyMs": 4821,
+      "correct": true
+    },
+    {
+      "id": "eval-08",
+      "category": "pricing",
+      "expected": "current",
+      "actual": "stale",
+      "score": 0.2816127364748,
+      "latencyMs": 5851,
+      "correct": false
+    },
+    {
+      "id": "eval-09",
+      "category": "pricing",
+      "expected": "stale",
+      "actual": "stale",
+      "score": 0.29904092890736,
+      "latencyMs": 4286,
+      "correct": true
+    },
+    {
+      "id": "eval-10",
+      "category": "pricing",
+      "expected": "current",
+      "actual": "stale",
+      "score": 0.28609733714,
+      "latencyMs": 3491,
+      "correct": false
+    },
+    {
+      "id": "eval-11",
+      "category": "version",
+      "expected": "stale",
+      "actual": "stale",
+      "score": 0.38440335296763267,
+      "latencyMs": 4570,
+      "correct": true
+    },
+    {
+      "id": "eval-12",
+      "category": "version",
+      "expected": "current",
+      "actual": "current",
+      "score": 1,
+      "latencyMs": 9,
+      "correct": true
+    },
+    {
+      "id": "eval-13",
+      "category": "version",
+      "expected": "stale",
+      "actual": "current",
+      "score": 0.681582647436,
+      "latencyMs": 431,
+      "correct": false
+    },
+    {
+      "id": "eval-14",
+      "category": "version",
+      "expected": "stale",
+      "actual": "current",
+      "score": 0.6817357138200001,
+      "latencyMs": 6334,
+      "correct": false
+    },
+    {
+      "id": "eval-15",
+      "category": "version",
+      "expected": "current",
+      "actual": "stale",
+      "score": 0.3083230142372,
+      "latencyMs": 4627,
+      "correct": false
+    },
+    {
+      "id": "eval-16",
+      "category": "version",
+      "expected": "stale",
+      "actual": "stale",
+      "score": 0.2876863186724,
+      "latencyMs": 6208,
+      "correct": true
+    },
+    {
+      "id": "eval-17",
+      "category": "version",
+      "expected": "current",
+      "actual": "current",
+      "score": 1,
+      "latencyMs": 11,
+      "correct": true
+    },
+    {
+      "id": "eval-18",
+      "category": "version",
+      "expected": "current",
+      "actual": "current",
+      "score": 1,
+      "latencyMs": 7,
+      "correct": true
+    },
+    {
+      "id": "eval-19",
+      "category": "version",
+      "expected": "current",
+      "actual": "stale",
+      "score": 0.3213285474212,
+      "latencyMs": 3168,
+      "correct": false
+    },
+    {
+      "id": "eval-20",
+      "category": "version",
+      "expected": "stale",
+      "actual": "current",
+      "score": 0.46605147658,
+      "latencyMs": 4438,
+      "correct": false
+    },
+    {
+      "id": "eval-21",
+      "category": "leadership",
+      "expected": "stale",
+      "actual": "stale",
+      "score": 0.39868077387793105,
+      "latencyMs": 3470,
+      "correct": true
+    },
+    {
+      "id": "eval-22",
+      "category": "leadership",
+      "expected": "current",
+      "actual": "stale",
+      "score": 0.3168081011,
+      "latencyMs": 3775,
+      "correct": false
+    },
+    {
+      "id": "eval-23",
+      "category": "leadership",
+      "expected": "stale",
+      "actual": "current",
+      "score": 1,
+      "latencyMs": 9,
+      "correct": false
+    },
+    {
+      "id": "eval-24",
+      "category": "leadership",
+      "expected": "current",
+      "actual": "stale",
+      "score": 0.31645379738,
+      "latencyMs": 4062,
+      "correct": false
+    },
+    {
+      "id": "eval-25",
+      "category": "leadership",
+      "expected": "stale",
+      "actual": "current",
+      "score": 0.7139945227200001,
+      "latencyMs": 5160,
+      "correct": false
+    },
+    {
+      "id": "eval-26",
+      "category": "law",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.69940359498,
+      "latencyMs": 4381,
+      "correct": true
+    },
+    {
+      "id": "eval-27",
+      "category": "law",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.69013249153056,
+      "latencyMs": 6457,
+      "correct": true
+    },
+    {
+      "id": "eval-28",
+      "category": "law",
+      "expected": "stale",
+      "actual": "current",
+      "score": 1,
+      "latencyMs": 8,
+      "correct": false
+    },
+    {
+      "id": "eval-29",
+      "category": "law",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.68719297032,
+      "latencyMs": 21421,
+      "correct": true
+    },
+    {
+      "id": "eval-30",
+      "category": "law",
+      "expected": "stale",
+      "actual": "current",
+      "score": 1,
+      "latencyMs": 9,
+      "correct": false
+    },
+    {
+      "id": "eval-31",
+      "category": "date",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.69940359498,
+      "latencyMs": 406,
+      "correct": true
+    },
+    {
+      "id": "eval-32",
+      "category": "date",
+      "expected": "stale",
+      "actual": "current",
+      "score": 0.69940359498,
+      "latencyMs": 644,
+      "correct": false
+    },
+    {
+      "id": "eval-33",
+      "category": "date",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.69095981058,
+      "latencyMs": 3659,
+      "correct": true
+    },
+    {
+      "id": "eval-34",
+      "category": "date",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.6665360315400001,
+      "latencyMs": 3787,
+      "correct": true
+    },
+    {
+      "id": "eval-35",
+      "category": "date",
+      "expected": "current",
+      "actual": "current",
+      "score": 0.6816353765472,
+      "latencyMs": 9778,
+      "correct": true
+    }
+  ]
+}

@@ -44,7 +44,7 @@ export default function ScoreRing({ score, size = 60, strokeWidth = 5, label }: 
         strokeDashoffset={offset}
         strokeLinecap="round"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        style={{ transition: 'stroke-dashoffset 0.6s ease, stroke 0.3s ease' }}
+        style={{ transition: 'stroke-dashoffset var(--transition-gauge, 800ms) cubic-bezier(0.16, 1, 0.3, 1), stroke 300ms ease' }}
       />
       {/* Label */}
       <text

@@ -63,10 +63,10 @@
 ---
 
 ### [05:00 – 05:30] Chapter 6: Evaluation Harness & Quality Metrics
-- **Visual**: Run `npm run eval` in terminal or show the Evaluation table on `/architecture`.
+- **Visual**: Run documented command `SERVER_URL=http://localhost:5000 npx -y tsx eval/run_eval.ts` in terminal or show the live Benchmarks matrix in the dashboard (`/benchmarks`).
 - **Narrator**:
-  > *"We don't just claim it works—we prove it. We built a 35-sample ground-truth evaluation dataset spanning pricing, versions, leadership, dates, and laws.  
-  > Our harness achieves an **87.5% precision** and **90.6% recall** on stale answer detection, with cache-hit response times under 30 milliseconds."*
+  > *"We don't just claim it works—we prove it. We built an automated 35-sample ground-truth evaluation dataset (`eval/eval_set.json`) spanning pricing, versions, leadership, dates, and laws.
+  > Against our live cluster with real Tavily search and MongoDB Atlas, our evaluation harness achieved **91.4% overall accuracy** (32/35 correct), a perfect **100.0% precision** with zero false positive flags, and **81.3% recall** on stale answer interception, with L1 cache-hit response times under 10 milliseconds (7.5ms measured)."*
 
 ---
 

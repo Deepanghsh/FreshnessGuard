@@ -1,0 +1,77 @@
+# --- Stage 1: UI Builder ---
+FROM node:25-alpine3.23 AS ui-builder
+WORKDIR /src
+RUN apk add --no-cache git
+RUN git clone --depth 1 --branch transports/v2.5.1 https://github.com/maximhq/bifrost /src/bifrost
+WORKDIR /src/bifrost/ui
+RUN npm ci && npm run build-enterprise
+
+# --- Stage 2: Dynamic Bifrost Builder ---
+FROM golang:1.27.3-alpine3.24 AS bifrost-builder
+WORKDIR /src/bifrost
+RUN apk add --no-cache gcc musl-dev sqlite-dev binutils git
+
+COPY --from=ui-builder /src/bifrost /src/bifrost
+COPY --from=ui-builder /src/bifrost/ui/out /src/bifrost/transports/bifrost-http/ui
+
+ENV CGO_ENABLED=1
+ENV GOOS=linux
+ENV GOARCH=amd64
+ENV GOWORK=off
+
+WORKDIR /src/bifrost/transports/bifrost-http
+RUN go build \
+    -ldflags="-w -s -X main.Version=v2.5.1" \
+    -a -trimpath \
+    -o /build/main \
+    .
+
+# --- Stage 3: FreshnessGuard Plugin Builder ---
+FROM golang:1.27.3-alpine3.24 AS plugin-builder
+WORKDIR /plugin
+RUN apk add --no-cache gcc musl-dev libc-dev
+
+# Use official module proxy to match Stage 2 dependencies
+COPY plugins/freshnessguard/go.mod plugins/freshnessguard/go.sum ./
+RUN go mod download
+
+COPY plugins/freshnessguard/ ./
+
+ENV CGO_ENABLED=1
+ENV GOOS=linux
+ENV GOARCH=amd64
+
+RUN go build -buildmode=plugin -trimpath -ldflags="-w -s" -a -o /plugin/freshnessguard.so .
+
+# --- Stage 4: Minimal Dynamic Runtime Image ---
+FROM alpine:3.23
+WORKDIR /app
+
+RUN apk upgrade --no-cache && \
+    apk add --no-cache musl libgcc ca-certificates wget zlib
+
+COPY --from=bifrost-builder /build/main /app/main
+COPY --from=bifrost-builder /src/bifrost/transports/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --from=plugin-builder /plugin/freshnessguard.so /app/plugins/freshnessguard.so
+
+ENV APP_PORT=8080 \
+    APP_HOST=0.0.0.0 \
+    LOG_LEVEL=info \
+    LOG_STYLE=json \
+    APP_DIR=/app/data
+
+RUN mkdir -p /app/data/logs /app/plugins && \
+    adduser -D -s /bin/sh appuser && \
+    chown -R appuser:appuser /app && \
+    chown -R appuser:0 /app/data && \
+    chmod -R g=rwX /app/data && \
+    chmod +x /app/docker-entrypoint.sh
+
+USER 1000:0
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["/app/main"]

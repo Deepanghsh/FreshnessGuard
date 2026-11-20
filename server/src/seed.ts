@@ -10,7 +10,7 @@ const MONGODB_URI = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/freshn
 const seeds = [
   {
     requestId: 'demo-001',
-    model: 'gpt-4o',
+    model: 'gemini-3.1-flash-lite',
     originalText: 'GPT-4 API costs $0.03 per 1K tokens for input. Python 3.11 is the latest stable release. OpenAI CEO is Sam Altman.',
     correctedAnswer: 'GPT-4 API costs $0.01 per 1K tokens for input *(updated)*. Python 3.13 *(updated)* is the latest stable release. OpenAI CEO is Sam Altman.',
     claims: [
@@ -22,7 +22,7 @@ const seeds = [
   },
   {
     requestId: 'demo-002',
-    model: 'claude-3-5-sonnet',
+    model: 'gemini-3.8-flash',
     originalText: 'React 17 is the current stable version of React. The npm registry hosts over 1 million packages. Node.js 18 LTS is recommended for production.',
     correctedAnswer: 'React 18 *(updated)* is the current stable version of React. The npm registry hosts over 1 million packages. Node.js 20 *(updated)* LTS is recommended for production.',
     claims: [
@@ -33,7 +33,7 @@ const seeds = [
   },
   {
     requestId: 'demo-003',
-    model: 'gpt-4o-mini',
+    model: 'gemini-3.1-flash-lite',
     originalText: 'The GDPR came into effect on 25 May 2018 and applies to all EU organisations. Under GDPR, fines can be up to €20 million or 4% of annual global turnover.',
     claims: [
       { id: 'd6', text: 'GDPR came into effect on 25 May 2018', category: 'law', extractedValue: 'GDPR', likelihood: 0.65, verdict: 'current', score: 0.88, sources: [{ url: 'https://gdpr.eu', title: 'GDPR.eu', isOfficial: true, publishedDate: new Date().toISOString() }], checkedAt: new Date() },
@@ -43,7 +43,7 @@ const seeds = [
   },
   {
     requestId: 'demo-004',
-    model: 'gpt-4o',
+    model: 'gemini-3.8-flash',
     originalText: 'Tesla CEO is Elon Musk. The company\'s latest car is the Cybertruck, priced at $39,990. Tesla stock (TSLA) is currently around $200.',
     claims: [
       { id: 'd8', text: 'Tesla CEO is Elon Musk', category: 'leadership', extractedValue: 'Elon Musk', likelihood: 0.85, verdict: 'current', score: 0.91, sources: [{ url: 'https://ir.tesla.com', title: 'Tesla Investor Relations', isOfficial: true, publishedDate: new Date().toISOString() }], checkedAt: new Date() },
@@ -54,7 +54,7 @@ const seeds = [
   },
   {
     requestId: 'demo-005',
-    model: 'gpt-4o',
+    model: 'gemini-3.1-flash-lite',
     originalText: 'TypeScript 5.0 introduced const type parameters. The latest version is TypeScript 4.9. npm install -g typescript@latest to get started.',
     correctedAnswer: 'TypeScript 5.0 introduced const type parameters. The latest version is TypeScript 5.5 *(updated)*. npm install -g typescript@latest to get started.',
     claims: [

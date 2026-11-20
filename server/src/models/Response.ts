@@ -9,6 +9,7 @@ export interface ISource {
   isOfficial?: boolean;
   content?: string;
   score?: number;
+  reliability?: 'high' | 'medium' | 'low';
 }
 
 export interface IClaim {
@@ -24,11 +25,22 @@ export interface IClaim {
   confidence?: number;
   checkedAt?: Date;
   correctedText?: string;
+  entity?: string;
+  product?: string;
+  attribute?: string;
+  unit?: string;
+  region?: string;
+  tier?: string;
+  timePeriod?: string;
+  enclosingSentence?: string;
 }
 
 export interface IResponse {
   _id?: any;
+  userId?: mongoose.Types.ObjectId;
+  isPublic?: boolean;
   requestId: string;
+  question?: string;
   model: string;
   provider?: string;
   originalText: string;
@@ -36,7 +48,7 @@ export interface IResponse {
   checkedAt: Date;
   claims: IClaim[];
   overallScore: number;
-  overallConfidence?: number;
+  overallConfidence?: number | null;
   summaryStatus?: SummaryStatus;
   summaryMessage?: string;
   staleCount: number;
@@ -56,6 +68,7 @@ const SourceSchema = new Schema<ISource>({
   isOfficial: Boolean,
   content: String,
   score: Number,
+  reliability: { type: String, enum: ['high', 'medium', 'low'] },
 }, { _id: false });
 
 const ClaimSchema = new Schema<IClaim>({
@@ -68,17 +81,28 @@ const ClaimSchema = new Schema<IClaim>({
   },
   extractedValue: { type: String, required: true },
   likelihood: { type: Number, required: true, min: 0, max: 1 },
-  verdict: { type: String, enum: ['current', 'stale', 'unverified'] },
+  verdict: { type: String, enum: ['current', 'stale', 'false', 'unverified'] },
   liveValue: String,
   sources: [SourceSchema],
   score: { type: Number, min: 0, max: 1 },
   confidence: { type: Number, min: 0, max: 1 },
   checkedAt: Date,
   correctedText: String,
+  entity: String,
+  product: String,
+  attribute: String,
+  unit: String,
+  region: String,
+  tier: String,
+  timePeriod: String,
+  enclosingSentence: String,
 }, { _id: false });
 
 const ResponseSchema = new Schema<IResponse>({
+  userId: { type: Schema.Types.ObjectId, ref: 'User', index: true, required: false },
+  isPublic: { type: Boolean, default: false, index: true },
   requestId: { type: String, required: true, index: true },
+  question: { type: String, required: false },
   model: { type: String, required: true },
   provider: String,
   originalText: { type: String, required: true },
@@ -86,7 +110,7 @@ const ResponseSchema = new Schema<IResponse>({
   checkedAt: { type: Date, default: Date.now },
   claims: [ClaimSchema],
   overallScore: { type: Number, required: true, min: 0, max: 1, default: 1 },
-  overallConfidence: { type: Number, min: 0, max: 1, default: 1 },
+  overallConfidence: { type: Number, min: 0, max: 1, default: null },
   summaryStatus: {
     type: String,
     enum: ['no_claims', 'all_fresh', 'stale_detected', 'unverified', 'bypassed'],
@@ -110,6 +134,7 @@ const ResponseSchema = new Schema<IResponse>({
 // Category TTLs: pricing=6h, version=12h, date=24h, leadership=24h, law=72h, fact=48h
 ResponseSchema.index({ checkedAt: 1 }, { expireAfterSeconds: 259200 });
 ResponseSchema.index({ checkedAt: -1 });
+ResponseSchema.index({ userId: 1, checkedAt: -1 });
 ResponseSchema.index({ staleCount: 1, checkedAt: -1 });
 ResponseSchema.index({ 'claims.verdict': 1, checkedAt: -1 });
 

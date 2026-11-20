@@ -1,5 +1,5 @@
 export type ClaimCategory = 'pricing' | 'version' | 'date' | 'law' | 'leadership' | 'fact';
-export type Verdict = 'current' | 'stale' | 'unverified';
+export type Verdict = 'current' | 'stale' | 'false' | 'unverified';
 export type Mode = 'inline' | 'async' | 'basic' | 'bypass';
 export type SummaryStatus = 'no_claims' | 'all_fresh' | 'stale_detected' | 'unverified' | 'bypassed';
 
@@ -11,6 +11,7 @@ export interface Source {
   isOfficial?: boolean;
   content?: string;
   score?: number;
+  reliability?: 'high' | 'medium' | 'low';
 }
 
 export interface Claim {
@@ -26,11 +27,20 @@ export interface Claim {
   confidence?: number;
   checkedAt?: string;
   correctedText?: string;
+  entity?: string;
+  product?: string;
+  attribute?: string;
+  unit?: string;
+  region?: string;
+  tier?: string;
+  timePeriod?: string;
+  enclosingSentence?: string;
 }
 
 export interface ResponseDoc {
   _id: string;
   requestId: string;
+  question?: string;
   model: string;
   provider?: string;
   originalText: string;
@@ -38,7 +48,7 @@ export interface ResponseDoc {
   checkedAt: string;
   claims: Claim[];
   overallScore: number;
-  overallConfidence?: number;
+  overallConfidence?: number | null;
   summaryStatus?: SummaryStatus;
   summaryMessage?: string;
   staleCount: number;
@@ -91,6 +101,10 @@ export interface HealthStatus {
   service?: string;
   version?: string;
   mongodb: 'connected' | 'disconnected';
+  storageMode?: 'mongodb_atlas' | 'in_memory_l1_degraded';
+  tavily?: 'configured' | 'misconfigured' | 'not_configured';
+  bifrost?: 'connected' | 'reachable' | 'unreachable' | 'not_independently_verified' | 'not_configured' | 'unhealthy';
+  gemini?: 'configured' | 'misconfigured' | 'not_configured';
   timestamp: string;
   sseClients?: number;
 }
@@ -102,7 +116,7 @@ export interface SSEEvent {
   requestId?: string;
   model?: string;
   overallScore?: number;
-  overallConfidence?: number;
+  overallConfidence?: number | null;
   summaryStatus?: SummaryStatus;
   summaryMessage?: string;
   staleCount?: number;
@@ -110,4 +124,26 @@ export interface SSEEvent {
   processingMs?: number;
   checkedAt?: string;
   previewText?: string;
+}
+
+export interface User {
+  _id: string;
+  email: string;
+  displayName: string;
+  avatarUrl?: string;
+  authProvider: 'local' | 'google';
+  role: 'user' | 'admin';
+  preferences?: {
+    theme?: 'dark' | 'light';
+    defaultModel?: string;
+    defaultMode?: Mode;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AuthResponse {
+  message?: string;
+  user: User;
+  token?: string;
 }

@@ -307,7 +307,7 @@ curl "http://localhost:3001/api/responses"
 curl "http://localhost:3001/api/responses?verdict=stale&page=2&limit=10"
 
 # Filter by model name
-curl "http://localhost:3001/api/responses?model=gpt-4o"
+curl "http://localhost:3001/api/responses?model=gemini-3.1-flash-lite"
 ```
 
 ---

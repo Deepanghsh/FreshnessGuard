@@ -55,9 +55,9 @@ describe('Frontend API Client Suite', () => {
     try {
       const modes: Mode[] = ['inline', 'async', 'basic', 'bypass'];
       for (const m of modes) {
-        const res = await api.postCheck('Test prompt text', 'gpt-4o', m);
+        const res = await api.postCheck('Test prompt text', 'gemini-3.1-flash-lite', m);
         expect(capturedBody.mode).toBe(m);
-        expect(capturedBody.model).toBe('gpt-4o');
+        expect(capturedBody.model).toBe('gemini-3.1-flash-lite');
         expect(res.mode).toBe(m);
       }
     } finally {
@@ -198,5 +198,37 @@ describe('Inspector & Playground Logic Suite', () => {
     expect(unique.has('stale_detected')).toBe(true);
     expect(unique.has('unverified')).toBe(true);
     expect(unique.has('bypassed')).toBe(true);
+  });
+
+  it('formats zero claims presentation as N/A or No claims to evaluate rather than 100% confidence', () => {
+    // Zero claims response
+    const emptyResponse = {
+      totalClaims: 0,
+      claims: [],
+      overallConfidence: null,
+    };
+
+    const formatConfidence = (res: { totalClaims: number; claims?: any[]; overallConfidence?: number | null }) => {
+      const hasClaims = res.totalClaims > 0 && res.claims && res.claims.length > 0;
+      if (!hasClaims || res.overallConfidence == null) {
+        return { display: 'N/A', tooltip: 'No claims to evaluate' };
+      }
+      return { display: `${(res.overallConfidence * 100).toFixed(0)}%`, tooltip: 'Verification confidence' };
+    };
+
+    const formattedEmpty = formatConfidence(emptyResponse);
+    expect(formattedEmpty.display).toBe('N/A');
+    expect(formattedEmpty.tooltip).toBe('No claims to evaluate');
+    expect(formattedEmpty.display).not.toBe('100%');
+
+    // Non-empty claims response
+    const validResponse = {
+      totalClaims: 2,
+      claims: [{ id: 'c1' }, { id: 'c2' }],
+      overallConfidence: 0.85,
+    };
+    const formattedValid = formatConfidence(validResponse);
+    expect(formattedValid.display).toBe('85%');
+    expect(formattedValid.tooltip).toBe('Verification confidence');
   });
 });

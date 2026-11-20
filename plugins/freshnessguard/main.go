@@ -192,7 +192,7 @@ func (p *FreshnessGuardPlugin) PostLLMHook(ctx *BifrostContext, resp *BifrostRes
 	// Internal recursion bypass check
 	if p.isBypass(ctx) {
 		p.logger.Println("Internal recursion bypass detected in PostLLMHook — passing through untouched")
-		p.injectHeaders(ctx, "1.000", 0, 0, "bypass")
+		p.injectHeaders(ctx, resp, "1.000", 0, 0, "bypass")
 		return resp, e, nil
 	}
 
@@ -236,7 +236,7 @@ func (p *FreshnessGuardPlugin) runBasicMode(ctx *BifrostContext, resp *BifrostRe
 	}
 
 	latencyMs := time.Since(start).Milliseconds()
-	p.injectHeaders(ctx, fmt.Sprintf("%.3f", freshness), staleCount, latencyMs, "basic")
+	p.injectHeaders(ctx, resp, fmt.Sprintf("%.3f", freshness), staleCount, latencyMs, "basic")
 
 	if staleCount > 0 && p.cfg.InjectNote {
 		note := buildBasicNote(freshness, staleCount, len(claims), claims)
@@ -349,7 +349,7 @@ func (p *FreshnessGuardPlugin) runServiceMode(ctx *BifrostContext, resp *Bifrost
 	}
 
 	latencyMs := time.Since(start).Milliseconds()
-	p.injectHeaders(ctx, fmt.Sprintf("%.3f", svcResp.OverallScore), svcResp.StaleCount, latencyMs, "service")
+	p.injectHeaders(ctx, resp, fmt.Sprintf("%.3f", svcResp.OverallScore), svcResp.StaleCount, latencyMs, "service")
 
 	if svcResp.StaleCount > 0 && p.cfg.InjectNote {
 		note := buildServiceNote(svcResp)
@@ -381,7 +381,7 @@ func buildServiceNote(s ServiceResponse) string {
 }
 
 func (p *FreshnessGuardPlugin) failOpen(ctx *BifrostContext, resp *BifrostResponse) (*BifrostResponse, *BifrostError, error) {
-	p.injectHeaders(ctx, "1.000", 0, 0, "bypass")
+	p.injectHeaders(ctx, resp, "1.000", 0, 0, "bypass")
 	return resp, nil, nil
 }
 
@@ -389,7 +389,31 @@ func (p *FreshnessGuardPlugin) failOpen(ctx *BifrostContext, resp *BifrostRespon
 // Header injection
 // ─────────────────────────────────────────────────────────
 
-func (p *FreshnessGuardPlugin) injectHeaders(ctx *BifrostContext, score string, stale int, latencyMs int64, mode string) {
+func (p *FreshnessGuardPlugin) injectHeaders(ctx *BifrostContext, resp *BifrostResponse, score string, stale int, latencyMs int64, mode string) {
+	// Directly attach FreshnessGuard headers to the response's ProviderResponseHeaders.
+	// Bifrost's HTTP inference handler forwards ProviderResponseHeaders directly to the
+	// outgoing HTTP response via lib.ApplyBifrostResponseHeaders -> ForwardProviderResponseHeaders.
+	if resp != nil {
+		if resp.ChatResponse != nil {
+			if resp.ChatResponse.ExtraFields.ProviderResponseHeaders == nil {
+				resp.ChatResponse.ExtraFields.ProviderResponseHeaders = make(map[string]string)
+			}
+			resp.ChatResponse.ExtraFields.ProviderResponseHeaders["X-FreshnessGuard-Score"] = score
+			resp.ChatResponse.ExtraFields.ProviderResponseHeaders["X-FreshnessGuard-Stale"] = strconv.Itoa(stale)
+			resp.ChatResponse.ExtraFields.ProviderResponseHeaders["X-FreshnessGuard-Latency"] = fmt.Sprintf("%dms", latencyMs)
+			resp.ChatResponse.ExtraFields.ProviderResponseHeaders["X-FreshnessGuard-Mode"] = mode
+		}
+		if extra := resp.GetExtraFields(); extra != nil {
+			if extra.ProviderResponseHeaders == nil {
+				extra.ProviderResponseHeaders = make(map[string]string)
+			}
+			extra.ProviderResponseHeaders["X-FreshnessGuard-Score"] = score
+			extra.ProviderResponseHeaders["X-FreshnessGuard-Stale"] = strconv.Itoa(stale)
+			extra.ProviderResponseHeaders["X-FreshnessGuard-Latency"] = fmt.Sprintf("%dms", latencyMs)
+			extra.ProviderResponseHeaders["X-FreshnessGuard-Mode"] = mode
+		}
+	}
+
 	if ctx != nil {
 		ctx.SetValue(freshnessGuardMetadataContextKey, freshnessGuardMetadata{
 			Score:     score,
@@ -411,6 +435,11 @@ func HTTPTransportResponseHeadersHookImpl(
 	resp *schemas.HTTPResponseMetadata,
 ) error {
 	if ctx == nil || resp == nil {
+		return nil
+	}
+
+	// If headers were already forwarded by Bifrost via ProviderResponseHeaders, preserve them.
+	if resp.Header("X-FreshnessGuard-Score") != "" {
 		return nil
 	}
 

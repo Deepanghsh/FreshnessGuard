@@ -54,7 +54,7 @@ suite('Genuine MongoDB Integration Tests (Requires Live MongoDB)', () => {
 
     const testDoc = new ResponseModel({
       requestId: 'test-live-1',
-      model: 'gpt-4o',
+      model: 'gemini-3.1-flash-lite',
       originalText: 'Real DB integration test claim text',
       claims: [
         {

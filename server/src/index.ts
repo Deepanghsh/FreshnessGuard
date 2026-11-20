@@ -1,10 +1,20 @@
-import 'dotenv/config';
+import path from 'path';
+import dotenv from 'dotenv';
+
+// ─── Environment Configuration Loading ────────────────────────────────────────
+// Load environment variables with explicit directory resolutions (server/.env and root .env)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
+dotenv.config(); // fallback
+
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
 import apiRouter from './routes/api';
+import authRouter from './routes/auth';
 
 const app = express();
 
@@ -67,6 +77,17 @@ const checkLimiter = rateLimit({
 });
 app.use('/api/check', checkLimiter);
 
+// ─── Authentication Rate Limiting ─────────────────────────────────────────────
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max:      isTest ? 5000 : 20,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message: { error: 'Too many authentication requests, please slow down.' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+
 // ─── Authentication Boundary Middleware ───────────────────────────────────────
 // Optional API key enforcement for mutating routes (POST /api/check, POST /api/verify/:id)
 export const apiKeyAuth: express.RequestHandler = (req, res, next) => {
@@ -88,16 +109,44 @@ export const apiKeyAuth: express.RequestHandler = (req, res, next) => {
 };
 
 app.post('/api/check', apiKeyAuth);
+app.post('/api/ask', apiKeyAuth);
 app.post('/api/verify/:id', apiKeyAuth);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+app.use('/api/auth', authRouter);
 app.use('/api', apiRouter);
-app.get('/healthz', (req, res) => {
+app.get('/healthz', async (req, res) => {
+  const isConnected = mongoose.connection.readyState === 1;
+  const tavilyKey = process.env.TAVILY_API_KEY?.trim();
+  const tavilyStatus = tavilyKey
+    ? (tavilyKey.startsWith('tvly-') && tavilyKey.length >= 20 ? 'configured' : 'misconfigured')
+    : 'not_configured';
+
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  const geminiStatus = geminiKey ? (geminiKey.length > 10 ? 'configured' : 'misconfigured') : 'not_configured';
+
+  // Actively probe Bifrost Gateway if reachable
+  let bifrostStatus = 'not_configured';
+  const bifrostUrl = process.env.BIFROST_URL?.trim() || 'http://localhost:8080';
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1200);
+    const resp = await fetch(bifrostUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    bifrostStatus = resp.ok || resp.status < 500 ? 'connected' : 'unhealthy';
+  } catch (_e) {
+    bifrostStatus = 'unreachable';
+  }
+
   res.json({
     status: 'ok',
     service: 'freshnessguard',
     version: '1.0.0',
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    mongodb: isConnected ? 'connected' : 'disconnected',
+    storageMode: isConnected ? 'mongodb_atlas' : 'in_memory_l1_degraded',
+    tavily: tavilyStatus,
+    bifrost: bifrostStatus,
+    gemini: geminiStatus,
     timestamp: new Date().toISOString(),
   });
 });
@@ -128,7 +177,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // ─── MongoDB + server startup ─────────────────────────────────────────────────
-const PORT       = parseInt(process.env.PORT ?? '3001');
+const PORT       = parseInt(process.env.PORT ?? '5000');
 const MONGODB_URI = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/freshnessguard';
 
 async function start(): Promise<void> {
@@ -138,13 +187,16 @@ async function start(): Promise<void> {
         serverSelectionTimeoutMS: 10000,
         family: 4,
       });
-      console.log('[FreshnessGuard] MongoDB connected:', MONGODB_URI.replace(/\/\/.*@/, '//<credentials>@'));
+      // Perform database ping healthcheck before declaring online
+      await mongoose.connection.db?.admin().ping();
+      const sanitizedUri = MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
+      console.log('[FreshnessGuard] MongoDB connected & verified:', sanitizedUri);
     } catch (dbErr) {
       console.warn('[FreshnessGuard] MongoDB connection unavailable:', (dbErr as Error).message);
       console.warn('[FreshnessGuard] Running in degraded mode with in-memory caching and fail-safe handling');
     }
 
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`[FreshnessGuard] Server listening on http://localhost:${PORT}`);
       console.log(`[FreshnessGuard] Dashboard: http://localhost:5173`);
     });

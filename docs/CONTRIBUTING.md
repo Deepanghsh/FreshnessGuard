@@ -13,14 +13,14 @@ Thank you for contributing! This document covers everything you need to get a lo
 │   │   ├── routes/           # Express route handlers (api.ts)
 │   │   ├── services/         # Core logic: extraction, verification, scoring, cache
 │   │   ├── models/           # Mongoose schemas (IResponse, IClaim, etc.)
+│   │   ├── __tests__/        # Jest test suites (8 suites, 111 total tests)
 │   │   └── index.ts          # App entry point
-│   ├── tests/                # Jest test suites
 │   ├── tsconfig.json
 │   └── package.json
 │
 ├── client/                   # React / TypeScript front-end (Vite)
 │   ├── src/
-│   ├── tests/                # Vitest test suites
+│   ├── test/                 # Vitest test suites (frontend.test.ts)
 │   ├── tsconfig.json
 │   └── package.json
 │
@@ -52,7 +52,7 @@ Thank you for contributing! This document covers everything you need to get a lo
 | Go | **1.27+** | Bifrost plugin development (aligns with Bifrost v2.5.1 runtime) |
 | MongoDB | **7+** | Persistence layer (local or Docker) |
 | Tavily API key | — | **Required** for live claim verification |
-| OpenAI API key | — | Optional — regex fallback activates automatically if omitted |
+| Google Gemini API key | — | Optional — regex fallback activates automatically if omitted |
 
 ---
 
@@ -227,7 +227,7 @@ npm run build --prefix server
 npm run build --prefix client
 ```
 
-Expected: **102 backend + 7 frontend + 22 Go = 131 tests passing, 2 skipped, 0 failed.**
+Expected totals across repository: **140 automated tests defined** (111 backend, 7 frontend, 22 Go). In the latest verified test execution without live external services, **109 backend tests passed, 2 skipped (MongoDB integration), 0 failed**; frontend and Go suites are defined in the repository but were not executed in this audit environment.
 
 See [TESTING.md](./TESTING.md) for full detail on each suite, mocking strategies, and how to enable the skipped DB integration tests.
 
@@ -278,11 +278,11 @@ The server continues to operate in degraded mode until MongoDB is available; no 
 
 ---
 
-### 4. OpenAI 429 (rate limit)
+### 4. Gemini rate limit or network error
 
-**Symptom:** Log line: `OpenAI rate limit hit, falling back to regex extractor`.
+**Symptom:** Log line: `[FreshnessGuard] Gemini extraction failed — checking fallback: ...`.
 
-**Action required:** None. FreshnessGuard automatically switches to the built-in regex extractor when OpenAI returns a 429 or is otherwise unavailable. All claims are still extracted and verified — just without LLM-enhanced extraction.
+**Action required:** None. FreshnessGuard automatically switches to the built-in deterministic regex extractor when Google Gemini is rate-limited or unavailable. All claims are still extracted and verified — just without LLM-enhanced extraction.
 
 ---
 

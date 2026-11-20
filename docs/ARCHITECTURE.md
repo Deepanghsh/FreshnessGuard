@@ -9,7 +9,7 @@ FreshnessGuard is an end-to-end temporal freshness intelligence layer for LLM ga
                               │                    Bifrost Gateway                     │
                               │                                                        │
 [Client Request] ───────────> │  [PreLLMHook] ───> [LLM Provider] ───> [PostLLMHook]   │ ───> [Enriched Response]
-                              │  (Bypass check)   (OpenAI, Anthropic)        │         │      (Headers + Notes)
+                              │  (Bypass check)   (Google Gemini)              │         │      (Headers + Notes)
                               └──────────────────────────────────────────────┼─────────┘
                                                                              │
                                                                 HTTP POST /api/check (<=2000ms)
@@ -19,7 +19,7 @@ FreshnessGuard is an end-to-end temporal freshness intelligence layer for LLM ga
                               │                                                        │
                               │  1. Check Bypass Headers / Explicit Mode               │
                               │  2. Two-Tier Cache Lookup (L1 In-Memory -> L2 MongoDB) │
-                              │  3. Claim Extraction (OpenAI Schema or Regex Fallback) │
+                              │  3. Claim Extraction (Gemini Structured JSON / Regex)  │
                               │  4. Volatility Triage (Pricing, Versions, Dates, etc.) │
                               │  5. Real-Time Verification via Tavily Search API       │
                               │  6. Multi-Factor Algorithmic Scoring (0.00 - 1.00)     │
@@ -114,7 +114,7 @@ FreshnessGuard supports four distinct operating modes:
 ## 4. Claim Extraction & Volatility Triage
 
 ### 4.1 Hybrid Extraction
-1. **Primary (LLM Structured Output)**: When `OPENAI_API_KEY` is provided, requests route to `gpt-4o-mini` with strict JSON schema definitions extracting:
+1. **Primary (LLM Structured Output)**: When `GEMINI_API_KEY` is provided, requests route to Google Gemini (`gemini-3.1-flash-lite`) with structured JSON output extracting:
    - Claim text
    - Category (`pricing`, `version`, `date`, `law`, `leadership`, `fact`)
    - Extracted value (e.g. `"$0.03 per 1K"`, `"18.2.0"`)
@@ -159,11 +159,13 @@ $$\text{ClaimScore} = (E_{\text{agreement}} \times 0.40) + (S_{\text{authority}}
 Where:
 - **$E_{\text{agreement}}$ (0.40 weight)**: Proportion of retrieved snippets corroborating the extracted claim (`1.0` for current, `0.0` for stale, `0.5` for ambiguous/unverified).
 - **$S_{\text{authority}}$ (0.30 weight)**: Domain trustworthiness blended with Tavily snippet relevance. Official domains receive a 0.85 base multiplier; general domains receive 0.45.
-- **$R_{\text{recency}}$ (0.20 weight)**: Time-decay step function based on publication date:
-  - $\le 7\text{ days}$: `1.00`
-  - $\le 30\text{ days}$: `0.80`
-  - $\le 90\text{ days}$: `0.60`
-  - $> 90\text{ days}$ or undated: `0.40`
+- **$R_{\text{recency}}$ (0.20 weight)**: Time-decay function based on publication date:
+  - $< 7\text{ days}$: `1.00`
+  - $< 30\text{ days}$: `0.75`
+  - $< 90\text{ days}$: `0.50`
+  - $\ge 90\text{ days}$: `0.15`
+  - Missing or invalid dates: `0.20`
+  - Future dates (anomaly baseline): `0.30`
 - **$C_{\text{count}}$ (0.10 weight)**: Source consensus scale: $\min(1.0, \frac{N_{\text{sources}}}{3})$.
 
 ### 5.3 Safety Bounds & Caps

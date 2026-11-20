@@ -54,6 +54,19 @@ jest.mock('../services/cache', () => ({
   resetCacheStats: jest.fn(),
 }));
 
+jest.mock('../services/llm', () => ({
+  generateAnswer: jest.fn().mockImplementation((question: string, model?: string) => {
+    if (question.includes('fail-generation')) {
+      throw new Error('LLM Generation Unavailable: Bifrost and Gemini unreachable');
+    }
+    return Promise.resolve({
+      answer: 'React 19 was released in December 2024. The latest version is 19.0.0.',
+      model: model || 'gemini-1.5-flash',
+      provider: 'gemini',
+    });
+  }),
+}));
+
 jest.mock('mongoose', () => {
   const actual = jest.requireActual('mongoose');
   return {
@@ -260,6 +273,30 @@ describe('API routes', () => {
       const res = await request(app).post('/api/check').send({ text: 'GPT-4 API costs $0.03 per 1K tokens.' });
       expect([200, 201]).toContain(res.status);
       expect(res.body).toHaveProperty('overallConfidence');
+    });
+  });
+
+  describe('POST /api/ask — real question execution & verification', () => {
+    it('accepts a natural-language question, calls LLM, and verifies generated answer', async () => {
+      const res = await request(app)
+        .post('/api/ask')
+        .send({ question: 'Is React 19 the latest stable major version?' });
+      expect([200, 201]).toContain(res.status);
+      expect(res.body).toHaveProperty('originalText');
+      expect(res.body).toHaveProperty('overallScore');
+      expect(res.body.question).toBe('Is React 19 the latest stable major version?');
+    });
+
+    it('returns 400 when question is empty', async () => {
+      const res = await request(app).post('/api/ask').send({ question: '' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation error');
+    });
+
+    it('returns 502 when LLM providers are unavailable', async () => {
+      const res = await request(app).post('/api/ask').send({ question: 'fail-generation test' });
+      expect(res.status).toBe(502);
+      expect(res.body.error).toBe('LLM Generation Unavailable');
     });
   });
 

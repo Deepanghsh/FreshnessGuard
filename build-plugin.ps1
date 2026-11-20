@@ -7,8 +7,8 @@ docker run --rm `
   -e CGO_ENABLED=1 `
   -e GOOS=linux `
   -e GOARCH=amd64 `
-  golang:1.21-alpine `
-  sh -c "apk add --no-cache gcc musl-dev libc-dev && go build -buildmode=plugin -trimpath -ldflags='-s -w' -o /build/freshnessguard.so ."
+  golang:1.27.3-alpine3.24 `
+  sh -c "apk add --no-cache gcc musl-dev libc-dev && go mod download && go build -buildmode=plugin -trimpath -ldflags='-s -w' -o /build/freshnessguard.so ."
 
 if ($LASTEXITCODE -eq 0) {
   if (-not (Test-Path "plugins")) { New-Item -ItemType Directory -Path "plugins" | Out-Null }

@@ -37,7 +37,15 @@ func postLLMForTest(p *FreshnessGuardPlugin, ctx *BifrostContext, resp *BifrostR
 	if hookErr := HTTPTransportResponseHeadersHook(ctx, nil, metadata); hookErr != nil && err == nil {
 		err = hookErr
 	}
-	testResponseHeaders = metadata.Headers
+	testResponseHeaders = make(map[string]string)
+	if got != nil && got.ChatResponse != nil && got.ChatResponse.ExtraFields.ProviderResponseHeaders != nil {
+		for k, v := range got.ChatResponse.ExtraFields.ProviderResponseHeaders {
+			testResponseHeaders[k] = v
+		}
+	}
+	for k, v := range metadata.Headers {
+		testResponseHeaders[k] = v
+	}
 	return got, bifrostErr, err
 }
 
@@ -45,7 +53,7 @@ func makeResponse(text string) *BifrostResponse {
 	s := text
 	return &BifrostResponse{
 		ChatResponse: &BifrostChatResponse{
-			Model: "gpt-4o",
+			Model: "gemini-3.1-flash-lite",
 			Choices: []BifrostResponseChoice{
 				{
 					ChatNonStreamResponseChoice: &ChatNonStreamResponseChoice{
@@ -479,7 +487,7 @@ func TestPostLLMHook_StreamingGraceful(t *testing.T) {
 	p := testPlugin(true, "", 2000)
 	streamingResp := &BifrostResponse{
 		ChatResponse: &BifrostChatResponse{
-			Model: "gpt-4o",
+			Model: "gemini-3.1-flash-lite",
 			Choices: []BifrostResponseChoice{
 				{
 					Index:                       0,
@@ -495,5 +503,174 @@ func TestPostLLMHook_StreamingGraceful(t *testing.T) {
 	}
 	if got == nil {
 		t.Fatal("response should not be nil")
+	}
+}
+
+// ─── ProviderResponseHeaders Direct Attachment Tests ────────
+
+func TestProviderResponseHeaders_BasicMode(t *testing.T) {
+	p := testPlugin(true, "", 2000)
+	resp := makeResponse("React v18 costs $0 (open source) as of 2024.")
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+
+	got, bifrostErr, err := p.PostLLMHook(ctx, resp, nil)
+	if err != nil || bifrostErr != nil {
+		t.Fatalf("unexpected error: bifrostErr=%v, err=%v", bifrostErr, err)
+	}
+	if got == nil || got.ChatResponse == nil {
+		t.Fatal("expected non-nil ChatResponse")
+	}
+
+	headers := got.ChatResponse.ExtraFields.ProviderResponseHeaders
+	if headers == nil {
+		t.Fatal("ProviderResponseHeaders is nil")
+	}
+
+	required := []string{
+		"X-FreshnessGuard-Score",
+		"X-FreshnessGuard-Stale",
+		"X-FreshnessGuard-Latency",
+		"X-FreshnessGuard-Mode",
+	}
+	for _, h := range required {
+		if val, ok := headers[h]; !ok || val == "" {
+			t.Errorf("missing or empty header %s in ProviderResponseHeaders: %v", h, headers)
+		}
+	}
+
+	if headers["X-FreshnessGuard-Mode"] != "basic" {
+		t.Errorf("expected Mode='basic', got %q", headers["X-FreshnessGuard-Mode"])
+	}
+	if headers["X-FreshnessGuard-Stale"] != "1" {
+		t.Errorf("expected Stale='1', got %q", headers["X-FreshnessGuard-Stale"])
+	}
+	if !strings.HasSuffix(headers["X-FreshnessGuard-Latency"], "ms") {
+		t.Errorf("expected Latency ending with 'ms', got %q", headers["X-FreshnessGuard-Latency"])
+	}
+}
+
+func TestProviderResponseHeaders_ServiceMode(t *testing.T) {
+	svcResp := ServiceResponse{
+		OverallScore: 0.85,
+		StaleCount:   1,
+		TotalClaims:  2,
+		Claims: []ClaimResult{
+			{Text: "v1.0", Category: "version", Verdict: "stale", Score: 0.85},
+			{Text: "$10", Category: "pricing", Verdict: "current", Score: 0.1},
+		},
+		ProcessingMs: 42,
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/check" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(svcResp)
+	}))
+	defer ts.Close()
+
+	p := testPlugin(false, ts.URL, 2000)
+	resp := makeResponse("Library v1.0 costs $10/mo")
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+
+	got, bifrostErr, err := p.PostLLMHook(ctx, resp, nil)
+	if err != nil || bifrostErr != nil {
+		t.Fatalf("unexpected error: bifrostErr=%v, err=%v", bifrostErr, err)
+	}
+	if got == nil || got.ChatResponse == nil {
+		t.Fatal("expected non-nil ChatResponse")
+	}
+
+	headers := got.ChatResponse.ExtraFields.ProviderResponseHeaders
+	if headers == nil {
+		t.Fatal("ProviderResponseHeaders is nil")
+	}
+
+	if headers["X-FreshnessGuard-Mode"] != "service" {
+		t.Errorf("expected Mode='service', got %q", headers["X-FreshnessGuard-Mode"])
+	}
+	if headers["X-FreshnessGuard-Score"] != "0.850" {
+		t.Errorf("expected Score='0.850', got %q", headers["X-FreshnessGuard-Score"])
+	}
+	if headers["X-FreshnessGuard-Stale"] != "1" {
+		t.Errorf("expected Stale='1', got %q", headers["X-FreshnessGuard-Stale"])
+	}
+	if !strings.HasSuffix(headers["X-FreshnessGuard-Latency"], "ms") {
+		t.Errorf("expected Latency ending with 'ms', got %q", headers["X-FreshnessGuard-Latency"])
+	}
+}
+
+func TestProviderResponseHeaders_FailOpen(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	p := testPlugin(false, ts.URL, 2000)
+	resp := makeResponse("Library v1.0 costs $10/mo")
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+
+	got, bifrostErr, err := p.PostLLMHook(ctx, resp, nil)
+	if err != nil || bifrostErr != nil {
+		t.Fatalf("unexpected error in fail-open: bifrostErr=%v, err=%v", bifrostErr, err)
+	}
+	if got == nil || got.ChatResponse == nil {
+		t.Fatal("expected non-nil ChatResponse")
+	}
+
+	headers := got.ChatResponse.ExtraFields.ProviderResponseHeaders
+	if headers == nil {
+		t.Fatal("ProviderResponseHeaders is nil")
+	}
+
+	if headers["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("expected Mode='bypass', got %q", headers["X-FreshnessGuard-Mode"])
+	}
+	if headers["X-FreshnessGuard-Score"] != "1.000" {
+		t.Errorf("expected Score='1.000', got %q", headers["X-FreshnessGuard-Score"])
+	}
+	if headers["X-FreshnessGuard-Stale"] != "0" {
+		t.Errorf("expected Stale='0', got %q", headers["X-FreshnessGuard-Stale"])
+	}
+	if headers["X-FreshnessGuard-Latency"] != "0ms" {
+		t.Errorf("expected Latency='0ms', got %q", headers["X-FreshnessGuard-Latency"])
+	}
+}
+
+func TestProviderResponseHeaders_BypassMode(t *testing.T) {
+	p := testPlugin(false, "http://127.0.0.1:19999", 2000)
+	resp := makeResponse("Library v1.0 costs $10/mo")
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"x-freshnessguard-bypass": "true",
+	})
+
+	got, bifrostErr, err := p.PostLLMHook(ctx, resp, nil)
+	if err != nil || bifrostErr != nil {
+		t.Fatalf("unexpected error in bypass: bifrostErr=%v, err=%v", bifrostErr, err)
+	}
+	if got == nil || got.ChatResponse == nil {
+		t.Fatal("expected non-nil ChatResponse")
+	}
+
+	headers := got.ChatResponse.ExtraFields.ProviderResponseHeaders
+	if headers == nil {
+		t.Fatal("ProviderResponseHeaders is nil")
+	}
+
+	if headers["X-FreshnessGuard-Mode"] != "bypass" {
+		t.Errorf("expected Mode='bypass', got %q", headers["X-FreshnessGuard-Mode"])
+	}
+	if headers["X-FreshnessGuard-Score"] != "1.000" {
+		t.Errorf("expected Score='1.000', got %q", headers["X-FreshnessGuard-Score"])
+	}
+	if headers["X-FreshnessGuard-Stale"] != "0" {
+		t.Errorf("expected Stale='0', got %q", headers["X-FreshnessGuard-Stale"])
+	}
+	if headers["X-FreshnessGuard-Latency"] != "0ms" {
+		t.Errorf("expected Latency='0ms', got %q", headers["X-FreshnessGuard-Latency"])
 	}
 }

@@ -6,26 +6,26 @@
     "enable_logging": true,
     "enforce_auth_on_inference": false
   },
-  "providers": {
-    "openai": {
-      "keys": [
-        {
-          "name": "openai-primary",
-          "value": "env.OPENAI_API_KEY",
-          "models": [
-            "*"
-          ],
-          "weight": 1.0
-        }
-      ]
+  "auth_config": {
+    "is_enabled": true,
+    "admin_username": {
+      "value": "admin"
     },
+    "admin_password": {
+      "value": "env.BIFROST_ADMIN_PASSWORD"
+    }
+  },
+  "setup_token": {
+    "value": "env.BIFROST_SETUP_TOKEN"
+  },
+  "providers": {
     "gemini": {
       "keys": [
         {
           "name": "gemini-primary",
           "value": "env.GEMINI_API_KEY",
           "models": [
-            "gemini-3.1-flash-lite"
+            "*"
           ],
           "weight": 1.0
         }
@@ -39,7 +39,7 @@
       "path": "/app/plugins/freshnessguard.so",
       "config": {
         "service_url": "http://server:3001",
-        "timeout_ms": 2000,
+        "timeout_ms": 45000,
         "basic_mode": false,
         "inject_note": true
       }

@@ -34,11 +34,11 @@ Add this plugin block to your Bifrost configuration file (`bifrost-config/config
     "enable_logging": true
   },
   "providers": {
-    "openai": {
+    "gemini": {
       "keys": [
         {
-          "name": "openai-primary",
-          "value": "env.OPENAI_API_KEY",
+          "name": "gemini-primary",
+          "value": "env.GEMINI_API_KEY",
           "models": ["*"],
           "weight": 1.0
         }
