@@ -50,6 +50,12 @@ app.use(cors({
       callback(null, true);
       return;
     }
+    // Allow any Vercel or Render domain if vercel.app or onrender.com is in allowedOrigins
+    const isVercelOrRender = /^https:\/\/[a-zA-Z0-9._-]+\.(vercel\.app|onrender\.com)$/.test(origin);
+    if (isVercelOrRender && allowedOrigins.some(o => o.includes('vercel.app') || o.includes('onrender.com'))) {
+      callback(null, true);
+      return;
+    }
     callback(new Error('Blocked by CORS policy'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
