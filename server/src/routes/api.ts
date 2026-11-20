@@ -498,7 +498,7 @@ router.post('/check', async (req: Request, res: ExpressResponse, next: NextFunct
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: err.errors });
+      res.status(400).json({ error: 'Validation error', details: err.issues });
       return;
     }
     next(err);
@@ -535,7 +535,7 @@ router.post('/ask', async (req: Request, res: ExpressResponse, next: NextFunctio
     });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: err.errors });
+      res.status(400).json({ error: 'Validation error', details: err.issues });
       return;
     }
     if (err.message && err.message.startsWith('LLM Generation Unavailable')) {
@@ -585,7 +585,7 @@ router.get('/responses', async (req: Request, res: ExpressResponse, next: NextFu
     res.json({ data: docs, total, page, limit, pages: Math.ceil(total / limit) });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: err.errors });
+      res.status(400).json({ error: 'Validation error', details: err.issues });
       return;
     }
     next(err);

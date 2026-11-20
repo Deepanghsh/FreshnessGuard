@@ -103,7 +103,7 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: err.errors });
+      res.status(400).json({ error: 'Validation error', details: err.issues });
       return;
     }
     next(err);
@@ -137,7 +137,7 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: err.errors });
+      res.status(400).json({ error: 'Validation error', details: err.issues });
       return;
     }
     next(err);
@@ -310,7 +310,7 @@ router.put('/profile', requireAuth, async (req: Request, res: Response, next: Ne
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: err.errors });
+      res.status(400).json({ error: 'Validation error', details: err.issues });
       return;
     }
     next(err);
