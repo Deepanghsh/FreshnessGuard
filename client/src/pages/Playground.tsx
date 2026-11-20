@@ -513,7 +513,7 @@ export default function Playground() {
       </div>
 
       {/* ── Split Workbench: Main Input (Left) + Configuration Sidebar (Right) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: '1.25rem', alignItems: 'stretch', width: '100%', boxSizing: 'border-box' }}>
+      <div className="playground-workbench-grid" style={{ display: 'grid', gap: '1.25rem', alignItems: 'stretch', width: '100%', boxSizing: 'border-box' }}>
 
         {/* Left Column: Prompt / Response Input */}
         <div
@@ -1177,7 +1177,7 @@ export default function Playground() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
                 gap: '1.25rem',
                 alignItems: 'stretch',
                 width: '100%',

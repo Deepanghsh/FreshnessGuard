@@ -863,7 +863,7 @@ ${c.sources && c.sources.length > 0 ? c.sources.map(s => `  - [${s.title || s.do
       </div>
 
       {/* ── 1. SUMMARY-FIRST VERIFICATION OVERVIEW (Always Visible) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.25rem', width: '100%' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: '1.25rem', width: '100%', boxSizing: 'border-box' }}>
 
         {/* Executive Verification Summary Card */}
         <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', boxSizing: 'border-box' }}>
@@ -1098,7 +1098,7 @@ ${c.sources && c.sources.length > 0 ? c.sources.map(s => `  - [${s.title || s.do
       {/* ── 2. INDEPENDENT EXPANDABLE / COLLAPSIBLE SECTIONS ── */}
 
       {/* SECTION 1: Original AI Response (Collapsible) & SECTION 2: Live Corrected Answer (Collapsible) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.25rem', width: '100%', alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: '1.25rem', width: '100%', alignItems: 'stretch', boxSizing: 'border-box' }}>
 
         {/* Original AI Response Text */}
         <div className="panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>

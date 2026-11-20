@@ -118,7 +118,7 @@ export default function Integrations() {
       </div>
 
       {/* ── Integration Cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '1.25rem', width: '100%', boxSizing: 'border-box' }}>
         {integrations.map((item, i) => {
           const Icon = item.icon;
           const isHealthy = item.status === 'online';

@@ -97,7 +97,7 @@ export default function StatCard({
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        padding: '0.8rem 0.9rem 0.65rem',
+        padding: '0.95rem 1.05rem 0.75rem',
         background: 'var(--panel)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
@@ -124,16 +124,16 @@ export default function StatCard({
         {icon && (
           <div
             style={{
-              width: 26,
-              height: 26,
-              borderRadius: 6,
+              width: 30,
+              height: 30,
+              borderRadius: 7,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               background: `${color}18`,
               color: color,
               border: `1px solid ${color}35`,
-              fontSize: '0.8125rem',
+              fontSize: '0.875rem',
               flexShrink: 0,
             }}
           >
@@ -144,16 +144,16 @@ export default function StatCard({
         {trendLabel && (
           <span
             style={{
-              fontSize: '0.625rem',
+              fontSize: '0.7rem',
               fontWeight: 600,
-              padding: '2px 6px',
-              borderRadius: 4,
+              padding: '3px 7px',
+              borderRadius: 5,
               fontFamily: 'var(--font-mono)',
               flexShrink: 1,
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              maxWidth: 'calc(100% - 32px)',
+              maxWidth: 'calc(100% - 34px)',
               background:
                 trend === 'up'
                   ? 'var(--current-dim)'
@@ -183,13 +183,13 @@ export default function StatCard({
       </div>
 
       {/* Second row: Clear, unconstrained Label */}
-      <div style={{ marginTop: 8, marginBottom: 2 }}>
+      <div style={{ marginTop: 9, marginBottom: 3 }}>
         <span
           style={{
-            fontSize: '0.6875rem',
+            fontSize: '0.75rem',
             fontWeight: 600,
             color: 'var(--muted)',
-            letterSpacing: '0.03em',
+            letterSpacing: '0.04em',
             textTransform: 'uppercase',
             lineHeight: 1.25,
             display: 'block',
@@ -205,7 +205,7 @@ export default function StatCard({
         {loading ? (
           <div
             style={{
-              height: 38,
+              height: 40,
               width: 100,
               background: 'var(--border)',
               borderRadius: 4,
@@ -213,10 +213,10 @@ export default function StatCard({
             }}
           />
         ) : (
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
             <span
               style={{
-                fontSize: '2rem',
+                fontSize: '2.15rem',
                 fontWeight: 800,
                 color: 'var(--text)',
                 fontFamily: 'var(--font-mono)',
@@ -227,21 +227,21 @@ export default function StatCard({
               {displayValue}
             </span>
             {unit && (
-              <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--muted)' }}>
+              <span style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--muted)' }}>
                 {unit}
               </span>
             )}
           </div>
         )}
         {subtitle && (
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dim)', marginTop: 4 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--dim)', marginTop: 4 }}>
             {subtitle}
           </div>
         )}
       </div>
 
       {/* Bottom Glowing Wave Sparkline (Image 5 style) */}
-      <div style={{ width: '100%', height: 42, marginTop: 4, marginLeft: -8, marginRight: -8 }} aria-hidden="true">
+      <div style={{ width: '100%', height: 46, marginTop: 4, marginLeft: -8, marginRight: -8 }} aria-hidden="true">
         <ResponsiveContainer width="105%" height="100%">
           <AreaChart data={waveData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
             <defs>

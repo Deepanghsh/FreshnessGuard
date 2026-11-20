@@ -145,7 +145,7 @@ export default function DecisionTraces() {
       {loading ? (
         <LoadingSpinner label="Loading distributed decision traces" />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.25rem', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '1.25rem', alignItems: 'start', width: '100%', boxSizing: 'border-box' }}>
 
           {/* Left Column: Trace Request List */}
           <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

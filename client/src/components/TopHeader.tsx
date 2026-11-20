@@ -94,16 +94,16 @@ export default function TopHeader() {
       }}
     >
       {/* Left: Sidebar Toggle + Clean Breadcrumbs */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
         <button
           onClick={() => {
-            if (window.innerWidth < 768) {
+            if (window.innerWidth < 1024) {
               toggleMobile();
             } else {
               toggleCollapsed();
             }
           }}
-          className="btn btn-secondary"
+          className="btn btn-secondary header-menu-toggle"
           style={{
             padding: '6px 8px',
             fontSize: '0.75rem',
@@ -111,6 +111,7 @@ export default function TopHeader() {
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: 'var(--radius-sm)',
+            flexShrink: 0,
           }}
           aria-label="Toggle navigation sidebar"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -118,7 +119,15 @@ export default function TopHeader() {
           <Menu size={16} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem' }}>
+        {/* Mobile Page Title (Compact on narrow screens) */}
+        <div className="mobile-header-title" style={{ display: 'none', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span style={{ fontWeight: 800, fontSize: '0.9375rem', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {pageInfo.title}
+          </span>
+        </div>
+
+        {/* Full Desktop Breadcrumbs */}
+        <div className="header-breadcrumbs desktop-only-inline" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem' }}>
           <span style={{ color: 'var(--muted)', fontWeight: 500 }}>FreshnessGuard</span>
           <span style={{ color: 'var(--dim)' }}>/</span>
           <span style={{ color: 'var(--muted)', fontWeight: 500 }}>{pageInfo.group}</span>
@@ -129,6 +138,7 @@ export default function TopHeader() {
         </div>
 
         <span
+          className="header-subtitle-pill desktop-only-inline"
           style={{
             fontSize: '0.6875rem',
             padding: '2px 8px',
@@ -144,9 +154,10 @@ export default function TopHeader() {
       </div>
 
       {/* Right: Actions, SSE Pill, Theme Switcher, User Workspace Dropdown */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {/* SSE Stream Status Pill */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {/* SSE Stream Status Pill (Desktop only) */}
         <div
+          className="desktop-only-flex"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -175,9 +186,9 @@ export default function TopHeader() {
         {/* Theme Toggle Button (Light / Dark) */}
         <button
           onClick={toggleTheme}
-          className="btn btn-secondary"
+          className="btn btn-secondary header-theme-toggle"
           style={{
-            padding: '6px 12px',
+            padding: '6px 10px',
             fontSize: '0.75rem',
             display: 'flex',
             alignItems: 'center',
@@ -189,13 +200,13 @@ export default function TopHeader() {
         >
           {theme === 'dark' ? (
             <>
-              <Sun size={14} color="#f59e0b" />
-              <span style={{ fontWeight: 600 }}>Light Theme</span>
+              <Sun size={15} color="#f59e0b" />
+              <span className="desktop-only-inline" style={{ fontWeight: 600 }}>Light</span>
             </>
           ) : (
             <>
-              <Moon size={14} color="#0D9488" />
-              <span style={{ fontWeight: 600 }}>Dark Theme</span>
+              <Moon size={15} color="#0D9488" />
+              <span className="desktop-only-inline" style={{ fontWeight: 600 }}>Dark</span>
             </>
           )}
         </button>

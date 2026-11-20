@@ -135,7 +135,7 @@ export default function Analytics() {
       </div>
 
       {/* ── Charts Row ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '1.25rem', width: '100%', boxSizing: 'border-box' }}>
 
         {/* Verification Activity Over Time */}
         <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

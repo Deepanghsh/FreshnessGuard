@@ -3,6 +3,8 @@
 > **Real-Time Temporal Freshness Intelligence & Stale-Answer Detection for the Bifrost LLM Gateway**  
 > *"Fact-checkers ask if a claim is true. We ask if it's still true."*
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-freshnessguard--ddn.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://freshnessguard-ddn.vercel.app)
+[![Live Backend](https://img.shields.io/badge/Live%20Backend-freshnessguard.onrender.com-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://freshnessguard.onrender.com/healthz)
 [![Geek Room Global AI Hackathon](https://img.shields.io/badge/Hackathon-Geek%20Room%20Global%20AI-blueviolet?style=for-the-badge)](https://geekroom.in)
 [![Dual Track](https://img.shields.io/badge/Tracks-Bifrost%20PS%2004%20%7C%20Tavily%20PS%2006-emerald?style=for-the-badge)](#2-problem-statement--hackathon-challenge-alignment)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -437,7 +439,7 @@ The FreshnessGuard platform includes an intuitive, accessible visual dashboard w
 ## 17. Demo Video & Walkthrough Script
 
 - **Demo Video Link**: [Watch the 6-Minute FreshnessGuard Walkthrough](https://youtu.be/freshnessguard-demo) *(or follow local script)*
-- **Demo Script**: Follow the complete minute-by-minute presentation walkthrough documented in [demo-script.md](demo-script.md).
+- **Demo Script**: Follow the complete minute-by-minute presentation walkthrough documented in [pitch-deck-outline.md](pitch-deck-outline.md).
 
 ---
 

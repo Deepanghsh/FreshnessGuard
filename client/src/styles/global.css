@@ -78,12 +78,12 @@
   --artwork-opacity:       0.85;
 
   /* Layout & Sizing */
-  --sidebar-w:         250px;
-  --sidebar-collapsed-w: 68px;
-  --radius-xs:         4px;
-  --radius-sm:         8px;
-  --radius-md:         12px;
-  --radius-lg:         16px;
+  --sidebar-w:         270px;
+  --sidebar-collapsed-w: 72px;
+  --radius-xs:         5px;
+  --radius-sm:         9px;
+  --radius-md:         14px;
+  --radius-lg:         18px;
   --transition:        200ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Calibrated Motion System Tokens (Prescribed Durations) */
@@ -226,11 +226,11 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--border-alt); }
 
 /* ─── Typography & Scale ─────────────────────────────────────────────────────── */
-h1 { font-family: var(--font-heading); font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.25; color: var(--text); }
-h2 { font-family: var(--font-heading); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
-h3 { font-family: var(--font-heading); font-size: 0.9375rem; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
-p  { color: var(--muted); line-height: 1.6; font-size: 0.875rem; }
-code, pre { font-family: var(--font-mono); font-size: 0.85em; font-variant-numeric: tabular-nums; }
+h1 { font-family: var(--font-heading); font-size: 1.875rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.25; color: var(--text); }
+h2 { font-family: var(--font-heading); font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+h3 { font-family: var(--font-heading); font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+p  { color: var(--muted); line-height: 1.6; font-size: 0.9375rem; }
+code, pre { font-family: var(--font-mono); font-size: 0.88em; font-variant-numeric: tabular-nums; }
 a { color: var(--accent); text-decoration: none; transition: color var(--transition); }
 a:hover { text-decoration: underline; color: var(--accent-light); }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-xs); }
@@ -242,7 +242,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   -webkit-backdrop-filter: var(--panel-blur);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 1.25rem;
+  padding: 1.35rem 1.45rem;
   box-shadow: var(--panel-shadow);
   transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
   width: 100%;
@@ -254,7 +254,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 }
 
 .panel-sm {
-  padding: 0.875rem 1rem;
+  padding: 1rem 1.15rem;
   width: 100%;
   box-sizing: border-box;
 }
@@ -263,7 +263,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   background: var(--card-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1.15rem;
   transition: background-color var(--transition), border-color var(--transition);
 }
 
@@ -281,10 +281,10 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
+  gap: 6px;
+  padding: 4px 9px;
   border-radius: var(--radius-xs);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -303,10 +303,10 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 0.5rem 1rem;
+  gap: 8px;
+  padding: 0.55rem 1.15rem;
   border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   transition: all var(--transition);
   white-space: nowrap;
@@ -623,6 +623,63 @@ label {
   background: #F8FAFC !important;
 }
 
+/* ─── Responsive Layout & Mobile Navigation ───────────────────────────────── */
+.main-layout-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.5rem 2rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1023px) {
+  .main-layout-scroll {
+    padding: 1.125rem 1rem;
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 16px));
+  }
+  .mobile-bottom-nav {
+    display: block !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-layout-scroll {
+    padding: 0.875rem 0.75rem;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 16px));
+  }
+}
+
+/* ─── Header & Auth Mobile Responsiveness ───────────────────────────────────── */
+@media (max-width: 900px) {
+  .auth-left-section {
+    display: none !important;
+  }
+  .auth-right-section {
+    flex: 1 1 100% !important;
+    min-height: 100vh !important;
+    height: auto !important;
+    max-width: 100% !important;
+    padding: 1.5rem 1rem !important;
+  }
+  .mobile-only-flex {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .desktop-only-inline {
+    display: none !important;
+  }
+  .desktop-only-flex {
+    display: none !important;
+  }
+  .mobile-header-title {
+    display: flex !important;
+  }
+}
+
 /* ─── Overview KPI Cards Grid ─────────────────────────────────────────────────── */
 .overview-kpi-grid {
   display: grid;
@@ -631,14 +688,71 @@ label {
   width: 100%;
 }
 
+@media (max-width: 640px) {
+  .overview-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .overview-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (min-width: 1600px) {
   .overview-kpi-grid {
     grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 }
 
-/* ─── Sidebar Mobile Drawer ─────────────────────────────────────────────────── */
+/* ─── Overview Quick Actions Grid ──────────────────────────────────────────── */
+.overview-quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  width: 100%;
+}
+
 @media (max-width: 768px) {
+  .overview-quick-actions {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+}
+
+/* ─── Connected Verifications: Desktop Table vs Mobile Cards ────────────────── */
+.desktop-table-container {
+  display: block;
+}
+
+.mobile-cards-container {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .desktop-table-container {
+    display: none !important;
+  }
+  .mobile-cards-container {
+    display: flex !important;
+  }
+}
+
+/* ─── Playground Workbench Responsive Grid ─────────────────────────────────── */
+.playground-workbench-grid {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+@media (max-width: 1023px) {
+  .playground-workbench-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─── Sidebar Mobile Drawer ─────────────────────────────────────────────────── */
+@media (max-width: 1023px) {
   .sidebar-root {
     position: fixed !important;
     left: 0;
@@ -646,10 +760,13 @@ label {
     bottom: 0;
     z-index: 50 !important;
     transform: translateX(-100%) !important;
-    box-shadow: 0 0 35px rgba(0, 0, 0, 0.6) !important;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.75) !important;
   }
   .sidebar-root.mobile-open {
     transform: translateX(0) !important;
+  }
+  .mobile-drawer-close-btn {
+    display: flex !important;
   }
 }
 

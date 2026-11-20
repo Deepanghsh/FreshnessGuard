@@ -663,10 +663,10 @@ export default function Overview() {
         </div>
       )}
 
-      {/* ── Quick Action Shortcuts ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+      {/* ── Quick Action Shortcuts (Responsive Grid) ── */}
+      <div className="overview-quick-actions">
         <div
-          className="panel"
+          className="panel interactive-card"
           style={{
             cursor: 'pointer',
             display: 'flex',
@@ -680,21 +680,21 @@ export default function Overview() {
           onClick={() => navigate('/playground')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Play size={18} color="var(--accent)" fill="currentColor" />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text)' }}>AI Playground</div>
-              <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--muted)' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--text)' }}>AI Playground</div>
+              <p style={{ margin: '2px 0 0', fontSize: '0.8125rem', color: 'var(--muted)' }}>
                 Ask questions to live models or test responses with real-time Tavily search verification.
               </p>
             </div>
           </div>
-          <ArrowRight size={16} color="var(--accent)" />
+          <ArrowRight size={18} color="var(--accent)" style={{ flexShrink: 0 }} />
         </div>
 
         <div
-          className="panel"
+          className="panel interactive-card"
           style={{
             cursor: 'pointer',
             display: 'flex',
@@ -708,17 +708,17 @@ export default function Overview() {
           onClick={() => navigate('/inspector')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 8, background: 'rgba(139, 92, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(139, 92, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Search size={18} color="#8b5cf6" />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text)' }}>Deep Claim Inspector</div>
-              <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--muted)' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--text)' }}>Deep Claim Inspector</div>
+              <p style={{ margin: '2px 0 0', fontSize: '0.8125rem', color: 'var(--muted)' }}>
                 Examine claim triage graphs, corroborate sources, review published dates &amp; authority scores.
               </p>
             </div>
           </div>
-          <ArrowRight size={16} color="#8b5cf6" />
+          <ArrowRight size={18} color="#8b5cf6" style={{ flexShrink: 0 }} />
         </div>
       </div>
 
@@ -755,129 +755,216 @@ export default function Overview() {
         )}
 
         {responses.length > 0 && (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Recent LLM responses">
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--card-subtle)' }}>
-                  {['Timestamp', 'Model & Mode', 'Integrity Score', 'Threat / Stale Level', 'Claims Checked', 'Response Preview', 'Action'].map(h => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: '0.625rem 1rem',
-                        textAlign: 'left',
-                        fontSize: '0.6875rem',
-                        fontWeight: 600,
-                        color: 'var(--muted)',
-                        letterSpacing: '0.05em',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {responses.map(r => {
-                  const scorePct = Math.round(r.overallScore * 100);
-                  const isStaleDetected = r.staleCount > 0;
+          <>
+            {/* Desktop Table View */}
+            <div className="desktop-table-container" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Recent LLM responses">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--card-subtle)' }}>
+                    {['Timestamp', 'Model & Mode', 'Integrity Score', 'Threat / Stale Level', 'Claims Checked', 'Response Preview', 'Action'].map(h => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: '0.625rem 1rem',
+                          textAlign: 'left',
+                          fontSize: '0.6875rem',
+                          fontWeight: 600,
+                          color: 'var(--muted)',
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {responses.map(r => {
+                    const scorePct = Math.round(r.overallScore * 100);
+                    const isStaleDetected = r.staleCount > 0;
 
-                  return (
-                    <tr
-                      key={r._id || r.requestId}
-                      style={{
-                        borderBottom: '1px solid var(--border)',
-                        transition: 'background var(--transition)',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-hover)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      {/* Timestamp */}
-                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                        {fmtDate(r.checkedAt)}
-                      </td>
+                    return (
+                      <tr
+                        key={r._id || r.requestId}
+                        style={{
+                          borderBottom: '1px solid var(--border)',
+                          transition: 'background var(--transition)',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-hover)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        {/* Timestamp */}
+                        <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                          {fmtDate(r.checkedAt)}
+                        </td>
 
-                      {/* Model & Mode */}
-                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontWeight: 600, color: 'var(--text)' }}>{r.model}</span>
-                          <span className={`badge ${r.mode === 'bypass' ? 'badge-muted' : r.mode === 'basic' ? 'badge-unverified' : 'badge-accent'}`}>
-                            {r.mode}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Integrity Score with Progress Bar (Image 4 style) */}
-                      <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap', minWidth: 140 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 60, height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
-                            <div
-                              style={{
-                                width: `${scorePct}%`,
-                                height: '100%',
-                                background: scorePct >= 80 ? '#34d399' : scorePct >= 50 ? '#fbbf24' : '#f87171',
-                                borderRadius: 3,
-                              }}
-                            />
+                        {/* Model & Mode */}
+                        <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text)' }}>{r.model}</span>
+                            <span className={`badge ${r.mode === 'bypass' ? 'badge-muted' : r.mode === 'basic' ? 'badge-unverified' : 'badge-accent'}`}>
+                              {r.mode}
+                            </span>
                           </div>
-                          <span style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-                            {scorePct}%
+                        </td>
+
+                        {/* Integrity Score with Progress Bar (Image 4 style) */}
+                        <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap', minWidth: 140 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 60, height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  width: `${scorePct}%`,
+                                  height: '100%',
+                                  background: scorePct >= 80 ? '#34d399' : scorePct >= 50 ? '#fbbf24' : '#f87171',
+                                  borderRadius: 3,
+                                }}
+                              />
+                            </div>
+                            <span style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                              {scorePct}%
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Threat / Stale Level Badge */}
+                        <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              fontSize: '0.6875rem',
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: 4,
+                              background: isStaleDetected ? 'var(--stale-dim)' : 'var(--current-dim)',
+                              color: isStaleDetected ? 'var(--stale)' : 'var(--current)',
+                              border: `1px solid ${isStaleDetected ? 'var(--stale-border)' : 'var(--current-border)'}`,
+                            }}
+                          >
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: isStaleDetected ? 'var(--stale)' : 'var(--current)' }} />
+                            {isStaleDetected ? `${r.staleCount} Stale Claim${r.staleCount > 1 ? 's' : ''}` : 'Fresh / Current'}
                           </span>
+                        </td>
+
+                        {/* Claims Ratio */}
+                        <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)' }}>
+                            {r.totalClaims} claim{r.totalClaims === 1 ? '' : 's'}
+                          </span>
+                        </td>
+
+                        {/* Response Preview */}
+                        <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', maxWidth: 280 }}>
+                          <p className="truncate" style={{ margin: 0, color: 'var(--muted)', fontSize: '0.8125rem' }}>
+                            {r.question ? `Q: ${r.question}` : r.originalText}
+                          </p>
+                        </td>
+
+                        {/* Action */}
+                        <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => navigate(`/inspector/${r._id || r.requestId}`, { state: { doc: r } })}
+                            style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                            title="Open in Inspector"
+                          >
+                            <Search size={12} /> Inspect
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="mobile-cards-container" style={{ display: 'none', flexDirection: 'column', gap: 10, padding: '0.75rem' }}>
+              {responses.map(r => {
+                const scorePct = Math.round(r.overallScore * 100);
+                const isStaleDetected = r.staleCount > 0;
+
+                return (
+                  <div
+                    key={r._id || r.requestId}
+                    className="subtle-card interactive-card"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      padding: '0.875rem 1rem',
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => navigate(`/inspector/${r._id || r.requestId}`, { state: { doc: r } })}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text)' }}>{r.model}</span>
+                        <span className={`badge ${r.mode === 'bypass' ? 'badge-muted' : r.mode === 'basic' ? 'badge-unverified' : 'badge-accent'}`} style={{ fontSize: '0.625rem' }}>
+                          {r.mode}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
+                        {fmtDate(r.checkedAt)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, margin: '2px 0' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          background: isStaleDetected ? 'var(--stale-dim)' : 'var(--current-dim)',
+                          color: isStaleDetected ? 'var(--stale)' : 'var(--current)',
+                          border: `1px solid ${isStaleDetected ? 'var(--stale-border)' : 'var(--current-border)'}`,
+                        }}
+                      >
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: isStaleDetected ? 'var(--stale)' : 'var(--current)' }} />
+                        {isStaleDetected ? `${r.staleCount} Stale` : 'Fresh / Current'}
+                      </span>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 50, height: 5, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${scorePct}%`,
+                              height: '100%',
+                              background: scorePct >= 80 ? '#34d399' : scorePct >= 50 ? '#fbbf24' : '#f87171',
+                            }}
+                          />
                         </div>
-                      </td>
-
-                      {/* Threat / Stale Level Badge */}
-                      <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                            padding: '3px 8px',
-                            borderRadius: 4,
-                            background: isStaleDetected ? 'var(--stale-dim)' : 'var(--current-dim)',
-                            color: isStaleDetected ? 'var(--stale)' : 'var(--current)',
-                            border: `1px solid ${isStaleDetected ? 'var(--stale-border)' : 'var(--current-border)'}`,
-                          }}
-                        >
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isStaleDetected ? 'var(--stale)' : 'var(--current)' }} />
-                          {isStaleDetected ? `${r.staleCount} Stale Claim${r.staleCount > 1 ? 's' : ''}` : 'Fresh / Current'}
+                        <span style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                          {scorePct}%
                         </span>
-                      </td>
+                      </div>
+                    </div>
 
-                      {/* Claims Ratio */}
-                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)' }}>
-                          {r.totalClaims} claim{r.totalClaims === 1 ? '' : 's'}
-                        </span>
-                      </td>
+                    <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {r.question ? `Q: ${r.question}` : r.originalText}
+                    </p>
 
-                      {/* Response Preview */}
-                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', maxWidth: 280 }}>
-                        <p className="truncate" style={{ margin: 0, color: 'var(--muted)', fontSize: '0.8125rem' }}>
-                          {r.question ? `Q: ${r.question}` : r.originalText}
-                        </p>
-                      </td>
-
-                      {/* Action */}
-                      <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => navigate(`/inspector/${r._id || r.requestId}`, { state: { doc: r } })}
-                          style={{ padding: '4px 10px', fontSize: '0.75rem' }}
-                          title="Open in Inspector"
-                        >
-                          <Search size={12} /> Inspect
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 2 }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
+                        {r.totalClaims} claim{r.totalClaims === 1 ? '' : 's'}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        Inspect Claims &rarr;
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 

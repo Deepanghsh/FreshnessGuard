@@ -113,12 +113,13 @@ export default function Register() {
     >
       {/* ── LEFT SECTION: Hero, Architecture & Live Pipeline (Direct on Background, Compact & Fully Scrollable) ── */}
       <div
+        className="auth-left-section"
         style={{
-          flex: '1 1 500px',
+          flex: '1.2 1 540px',
           height: '100vh',
           background: 'var(--auth-left-bg)',
           borderRight: '1px solid var(--border)',
-          padding: '1.25rem 1.75rem',
+          padding: '1.75rem 2.25rem',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -133,29 +134,29 @@ export default function Register() {
         <div
           style={{
             width: '100%',
-            maxWidth: '520px',
+            maxWidth: '620px',
             margin: 'auto 0',
-            padding: '1.25rem 1.5rem',
+            padding: '1.75rem 2rem',
             background: 'var(--auth-left-card-bg)',
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
-            borderRadius: '16px',
+            borderRadius: '18px',
             border: '1px solid var(--auth-left-card-border)',
             boxShadow: 'var(--auth-card-shadow)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '0.75rem',
+            gap: '1rem',
             boxSizing: 'border-box',
           }}
           className="animate-fade-in"
         >
           {/* Brand Header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div
               style={{
-                width: 38,
-                height: 38,
-                borderRadius: '10px',
+                width: 44,
+                height: 44,
+                borderRadius: '12px',
                 background: 'linear-gradient(135deg, rgba(45, 212, 191, 0.3), rgba(139, 92, 246, 0.25))',
                 border: '1.5px solid var(--accent)',
                 display: 'flex',
@@ -165,13 +166,13 @@ export default function Register() {
                 flexShrink: 0,
               }}
             >
-              <Shield size={20} color="var(--accent)" strokeWidth={2.4} />
+              <Shield size={24} color="var(--accent)" strokeWidth={2.4} />
             </div>
             <div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--auth-text-title)' }}>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--auth-text-title)' }}>
                 FreshnessGuard
               </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                 AI Temporal Verification Gateway
               </div>
             </div>
@@ -183,28 +184,28 @@ export default function Register() {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '3px 8px',
+                gap: 7,
+                padding: '4px 10px',
                 borderRadius: 14,
                 background: 'var(--accent-dim)',
                 border: '1px solid rgba(45, 212, 191, 0.40)',
                 color: 'var(--accent)',
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 fontWeight: 700,
-                marginBottom: '0.35rem',
+                marginBottom: '0.5rem',
               }}
             >
-              <Sparkles size={12} />
+              <Sparkles size={13} />
               <span>Multi-Tenant Enterprise Verification</span>
             </div>
 
             <h1
               style={{
-                fontSize: 'clamp(1.15rem, 1.4vw, 1.35rem)',
+                fontSize: 'clamp(1.3rem, 1.6vw, 1.55rem)',
                 fontWeight: 800,
                 letterSpacing: '-0.025em',
-                lineHeight: 1.25,
-                margin: '0 0 0.35rem',
+                lineHeight: 1.3,
+                margin: '0 0 0.5rem',
                 color: 'var(--auth-text-title)',
               }}
             >
@@ -212,9 +213,9 @@ export default function Register() {
             </h1>
             <p
               style={{
-                fontSize: '0.8125rem',
+                fontSize: '0.9rem',
                 color: 'var(--auth-text-body)',
-                lineHeight: 1.45,
+                lineHeight: 1.6,
                 margin: 0,
                 fontWeight: 450,
               }}
@@ -225,19 +226,19 @@ export default function Register() {
 
           {/* Live Temporal Verification Stream */}
           <div style={{ width: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', fontWeight: 700, color: 'var(--auth-text-title)' }}>
-                <Network size={14} color="var(--accent)" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.875rem', fontWeight: 700, color: 'var(--auth-text-title)' }}>
+                <Network size={16} color="var(--accent)" />
                 <span>Temporal Verification Flow</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.7rem', color: 'var(--current)', fontWeight: 700 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--current)', boxShadow: '0 0 6px var(--current)' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: 'var(--current)', fontWeight: 700 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--current)', boxShadow: '0 0 6px var(--current)' }} />
                 Live Pipeline Active
               </div>
             </div>
 
             {/* 5-Step Pipeline Steps */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', position: 'relative' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', position: 'relative' }}>
               {[
                 {
                   step: '1',
@@ -282,9 +283,9 @@ export default function Register() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8,
-                      padding: '4px 8px',
-                      borderRadius: '6px',
+                      gap: 12,
+                      padding: '7px 12px',
+                      borderRadius: '8px',
                       background: 'var(--auth-left-step-bg)',
                       border: '1px solid var(--auth-left-step-border)',
                       boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
@@ -292,9 +293,9 @@ export default function Register() {
                   >
                     <div
                       style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: '6px',
+                        width: 28,
+                        height: 28,
+                        borderRadius: '7px',
                         background: 'var(--auth-badge-bg)',
                         border: `1.5px solid ${node.color}`,
                         color: node.color,
@@ -302,23 +303,23 @@ export default function Register() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontWeight: 800,
-                        fontSize: '0.7rem',
+                        fontSize: '0.75rem',
                         flexShrink: 0,
                         boxShadow: `0 0 8px ${node.color}25`,
                       }}
                     >
-                      <Icon size={12} />
+                      <Icon size={14} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--auth-text-title)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--auth-text-title)' }}>
                           {node.title}
                         </span>
-                        <span style={{ fontSize: '0.68rem', color: node.color, fontWeight: 700 }}>
+                        <span style={{ fontSize: '0.72rem', color: node.color, fontWeight: 700 }}>
                           #{node.step}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.6875rem', color: 'var(--auth-text-muted)', marginTop: 1, lineHeight: 1.3, fontWeight: 450 }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--auth-text-muted)', marginTop: 2, lineHeight: 1.35, fontWeight: 450 }}>
                         {node.desc}
                       </div>
                     </div>
@@ -334,8 +335,8 @@ export default function Register() {
               display: 'flex',
               flexWrap: 'wrap',
               alignItems: 'center',
-              gap: 6,
-              paddingTop: '0.35rem',
+              gap: 8,
+              paddingTop: '0.5rem',
               borderTop: '1px solid var(--border)',
             }}
           >
@@ -343,51 +344,51 @@ export default function Register() {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
-                padding: '3px 8px',
+                gap: 6,
+                padding: '4px 10px',
                 borderRadius: 14,
                 background: 'var(--auth-badge-bg)',
                 border: '1px solid var(--auth-badge-border)',
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 fontWeight: 600,
                 color: 'var(--auth-text-title)',
               }}
             >
-              <Zap size={11} color="var(--accent)" />
+              <Zap size={13} color="var(--accent)" />
               <span>Sub-Second Latency</span>
             </div>
             <div
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
-                padding: '3px 8px',
+                gap: 6,
+                padding: '4px 10px',
                 borderRadius: 14,
                 background: 'var(--auth-badge-bg)',
                 border: '1px solid var(--auth-badge-border)',
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 fontWeight: 600,
                 color: 'var(--auth-text-title)',
               }}
             >
-              <Globe size={11} color="#F59E0B" />
+              <Globe size={13} color="#F59E0B" />
               <span>Tavily Corroborated</span>
             </div>
             <div
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
-                padding: '3px 8px',
+                gap: 6,
+                padding: '4px 10px',
                 borderRadius: 14,
                 background: 'var(--auth-badge-bg)',
                 border: '1px solid var(--auth-badge-border)',
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 fontWeight: 600,
                 color: 'var(--current)',
               }}
             >
-              <Lock size={11} color="var(--current)" />
+              <Lock size={13} color="var(--current)" />
               <span>Tenant Isolation</span>
             </div>
           </div>
@@ -396,14 +397,15 @@ export default function Register() {
 
       {/* ── RIGHT SECTION: Authentication Workbench (Always Centered & Fully Scrollable) ── */}
       <div
+        className="auth-right-section"
         style={{
-          flex: '1 1 420px',
+          flex: '1 1 480px',
           height: '100vh',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '1.5rem',
+          padding: '2rem 1.75rem',
           boxSizing: 'border-box',
           position: 'relative',
           overflowY: 'auto',
@@ -448,7 +450,7 @@ export default function Register() {
         <div
           style={{
             width: '100%',
-            maxWidth: '420px',
+            maxWidth: '470px',
             margin: '0 auto',
             display: 'flex',
             flexDirection: 'column',
@@ -459,22 +461,44 @@ export default function Register() {
           <div
             style={{
               width: '100%',
-              padding: '1.75rem 2rem',
+              padding: '2rem 2.25rem',
               background: 'var(--auth-card-bg)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',
-              borderRadius: '16px',
+              borderRadius: '18px',
               border: '1px solid var(--auth-card-border)',
               boxShadow: 'var(--auth-card-shadow)',
               boxSizing: 'border-box',
             }}
             className="animate-fade-in"
           >
+          {/* Mobile-Only Brand Logo Header */}
+          <div className="mobile-only-flex" style={{ display: 'none', alignItems: 'center', gap: 10, marginBottom: '1.25rem' }}>
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 8,
+                background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(139, 92, 246, 0.15))',
+                border: '1.5px solid var(--accent)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Shield size={18} color="var(--accent)" strokeWidth={2.2} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '1rem', lineHeight: 1.2, color: 'var(--text)' }}>FreshnessGuard</div>
+              <div style={{ fontSize: '0.625rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase' }}>Response Intelligence</div>
+            </div>
+          </div>
+
           <div style={{ marginBottom: '1.5rem' }}>
-            <h2 style={{ fontSize: '1.625rem', fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 0.5rem', color: 'var(--text)' }}>
+            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 0.5rem', color: 'var(--text)' }}>
               Create Personal Workspace
             </h2>
-            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted)', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: '0.925rem', color: 'var(--muted)', lineHeight: 1.5 }}>
               Register with your organization email or start immediately with 1-click demo access.
             </p>
           </div>
@@ -491,7 +515,7 @@ export default function Register() {
                 background: 'var(--stale-dim)',
                 border: '1px solid var(--stale-border)',
                 color: 'var(--stale)',
-                fontSize: '0.8125rem',
+                fontSize: '0.85rem',
                 marginBottom: '1.25rem',
               }}
             >
@@ -507,7 +531,7 @@ export default function Register() {
             className="btn interactive-card"
             style={{
               width: '100%',
-              height: '44px',
+              height: '48px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -516,7 +540,7 @@ export default function Register() {
               border: '1px solid var(--border)',
               color: 'var(--text)',
               borderRadius: 'var(--radius-sm)',
-              fontSize: '0.875rem',
+              fontSize: '0.925rem',
               fontWeight: 600,
               cursor: 'pointer',
               boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
@@ -561,11 +585,11 @@ export default function Register() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
             <div>
               <label
                 htmlFor="displayName"
-                style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', marginBottom: 5 }}
+                style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', marginBottom: 5 }}
               >
                 Full name / Workspace name
               </label>
@@ -580,12 +604,12 @@ export default function Register() {
                 style={{
                   width: '100%',
                   boxSizing: 'border-box',
-                  padding: '10px 14px',
+                  padding: '11px 14px',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border)',
                   background: 'var(--card-subtle)',
                   color: 'var(--text)',
-                  fontSize: '0.875rem',
+                  fontSize: '0.925rem',
                   outline: 'none',
                 }}
               />
@@ -594,7 +618,7 @@ export default function Register() {
             <div>
               <label
                 htmlFor="email"
-                style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', marginBottom: 5 }}
+                style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', marginBottom: 5 }}
               >
                 Work email address
               </label>
@@ -609,12 +633,12 @@ export default function Register() {
                 style={{
                   width: '100%',
                   boxSizing: 'border-box',
-                  padding: '10px 14px',
+                  padding: '11px 14px',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border)',
                   background: 'var(--card-subtle)',
                   color: 'var(--text)',
-                  fontSize: '0.875rem',
+                  fontSize: '0.925rem',
                   outline: 'none',
                 }}
               />
@@ -623,7 +647,7 @@ export default function Register() {
             <div>
               <label
                 htmlFor="password"
-                style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', marginBottom: 5 }}
+                style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', marginBottom: 5 }}
               >
                 Password (min. 8 characters)
               </label>
@@ -639,12 +663,12 @@ export default function Register() {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    padding: '10px 42px 10px 14px',
+                    padding: '11px 42px 11px 14px',
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border)',
                     background: 'var(--card-subtle)',
                     color: 'var(--text)',
-                    fontSize: '0.875rem',
+                    fontSize: '0.925rem',
                     outline: 'none',
                   }}
                 />
@@ -674,7 +698,7 @@ export default function Register() {
             <div>
               <label
                 htmlFor="confirmPassword"
-                style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', marginBottom: 5 }}
+                style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', marginBottom: 5 }}
               >
                 Confirm password
               </label>
@@ -689,12 +713,12 @@ export default function Register() {
                 style={{
                   width: '100%',
                   boxSizing: 'border-box',
-                  padding: '10px 14px',
+                  padding: '11px 14px',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border)',
                   background: 'var(--card-subtle)',
                   color: 'var(--text)',
-                  fontSize: '0.875rem',
+                  fontSize: '0.925rem',
                   outline: 'none',
                 }}
               />
@@ -706,12 +730,12 @@ export default function Register() {
               className="btn btn-primary"
               style={{
                 width: '100%',
-                height: '44px',
+                height: '48px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 8,
-                fontSize: '0.875rem',
+                fontSize: '0.925rem',
                 fontWeight: 700,
                 marginTop: '0.5rem',
               }}

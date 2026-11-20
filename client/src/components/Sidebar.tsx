@@ -3,7 +3,7 @@ import {
   Shield, LayoutDashboard, FlaskConical, Search, Network,
   Activity, Database, CheckCircle2, AlertTriangle, Settings,
   ShieldAlert, Layers, GitCommit, Zap, BarChart3, Boxes,
-  ChevronDown, ChevronRight, ChevronLeft, ChevronRightSquare,
+  ChevronDown, ChevronRight, ChevronLeft, ChevronRightSquare, X,
   type LucideIcon
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -108,9 +108,9 @@ function StatusItem({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        fontSize: '0.6875rem',
-        marginTop: 4,
-        padding: '3px 6px',
+        fontSize: '0.75rem',
+        marginTop: 5,
+        padding: '4px 8px',
         borderRadius: 'var(--radius-xs)',
         background: 'var(--card-subtle)',
         border: '1px solid var(--border)',
@@ -203,9 +203,9 @@ export default function Sidebar() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <div
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
+                width: 36,
+                height: 36,
+                borderRadius: 9,
                 background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(139, 92, 246, 0.15))',
                 border: '1px solid var(--border-glow)',
                 display: 'flex',
@@ -215,19 +215,38 @@ export default function Sidebar() {
                 boxShadow: '0 0 12px var(--accent-dim)',
               }}
             >
-              <Shield size={18} color="var(--accent)" strokeWidth={2.2} aria-hidden="true" />
+              <Shield size={20} color="var(--accent)" strokeWidth={2.2} aria-hidden="true" />
             </div>
             {!collapsed && (
               <div className="animate-fade-in">
-                <div style={{ fontWeight: 800, fontSize: '0.9375rem', letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--text)' }}>
+                <div style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--text)' }}>
                   FreshnessGuard
                 </div>
-                <div style={{ fontSize: '0.625rem', color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   Response Intelligence
                 </div>
               </div>
             )}
           </div>
+
+          {/* Close button inside mobile drawer */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="mobile-drawer-close-btn"
+            aria-label="Close navigation drawer"
+            style={{
+              display: 'none', // Controlled via CSS media query
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-xs)',
+              padding: 5,
+              color: 'var(--muted)',
+              cursor: 'pointer',
+            }}
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Live System Indicators */}
@@ -276,26 +295,26 @@ export default function Sidebar() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    fontSize: '0.625rem',
+                    fontSize: '0.72rem',
                     color: 'var(--dim)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
                     fontWeight: 700,
-                    padding: '4px 8px 6px',
+                    padding: '5px 8px 6px',
                     cursor: 'pointer',
                     userSelect: 'none',
                   }}
                   title={`Toggle ${group} group`}
                 >
                   <span>{group}</span>
-                  {isGroupCollapsed ? <ChevronRight size={12} color="var(--dim)" /> : <ChevronDown size={12} color="var(--dim)" />}
+                  {isGroupCollapsed ? <ChevronRight size={13} color="var(--dim)" /> : <ChevronDown size={13} color="var(--dim)" />}
                 </div>
               ) : (
                 <div style={{ height: 1, background: 'var(--border)', margin: '6px 8px' }} />
               )}
 
               {(!isGroupCollapsed || collapsed) && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {items.map(({ to, label, icon: Icon, end }) => (
                     <NavLink
                       key={to}
@@ -308,10 +327,10 @@ export default function Sidebar() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: collapsed ? 'center' : 'flex-start',
-                        gap: 10,
-                        padding: collapsed ? '0.625rem' : '0.5rem 0.75rem',
+                        gap: 11,
+                        padding: collapsed ? '0.65rem' : '0.55rem 0.85rem',
                         borderRadius: 'var(--radius-sm)',
-                        fontSize: '0.8125rem',
+                        fontSize: '0.875rem',
                         fontWeight: isActive ? 700 : 500,
                         color: isActive ? 'var(--accent)' : 'var(--muted)',
                         background: isActive ? 'var(--accent-dim)' : 'transparent',
@@ -322,7 +341,7 @@ export default function Sidebar() {
                         position: 'relative',
                       })}
                     >
-                      <Icon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+                      <Icon size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
                       {!collapsed && (
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {label}

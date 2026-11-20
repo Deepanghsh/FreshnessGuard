@@ -277,6 +277,8 @@ export default function Architecture() {
           boxSizing: 'border-box',
         }}
       >
+        <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ minWidth: 900 }}>
         {/* Tier Header Navigation Spanning Columns 1-2, 3-4, and 5-6 */}
         <div
           style={{
@@ -543,6 +545,8 @@ export default function Architecture() {
           {/* Col 6: SECOND GLASS CYLINDER (RESPONSE STREAM) */}
           <CylinderStream label="Response Stream" subtitle="SSE Broadcast" />
 
+        </div>
+          </div>
         </div>
       </div>
 

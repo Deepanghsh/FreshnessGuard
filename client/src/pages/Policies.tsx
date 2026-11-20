@@ -168,7 +168,7 @@ export default function Policies() {
       </div>
 
       {/* ── Policy Fine-Tuning Controls & Simulation ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '1.25rem', width: '100%', boxSizing: 'border-box' }}>
 
         {/* Left Column: Threshold Sliders */}
         <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

@@ -1,7 +1,8 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import React, { useState, createContext, useContext, useCallback } from 'react';
+import React, { useState, createContext, useContext, useCallback, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import TopHeader from './TopHeader';
+import MobileBottomNav from './MobileBottomNav';
 import ErrorToast from './ErrorToast';
 
 interface Toast { id: number; message: string; type?: 'error' | 'success' | 'info'; }
@@ -42,6 +43,23 @@ export default function Layout() {
 
   const location = useLocation();
 
+  // Auto-close mobile drawer when route changes
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // Prevent background scrolling when mobile drawer is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileOpen]);
+
   const toggleCollapsed = useCallback(() => setCollapsed(c => !c), []);
   const toggleMobile = useCallback(() => setMobileOpen(m => !m), []);
 
@@ -70,11 +88,11 @@ export default function Layout() {
               style={{
                 position: 'fixed',
                 inset: 0,
-                background: 'rgba(0, 0, 0, 0.65)',
-                backdropFilter: 'blur(4px)',
-                WebkitBackdropFilter: 'blur(4px)',
-                zIndex: 40,
-                transition: 'opacity 0.2s ease',
+                background: 'rgba(0, 0, 0, 0.70)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
+                zIndex: 45,
+                transition: 'opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1)',
               }}
             />
           )}
@@ -85,15 +103,7 @@ export default function Layout() {
             <TopHeader />
             <main
               id="main-content"
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                padding: '1.5rem 2rem',
-                width: '100%',
-                minWidth: 0,
-                boxSizing: 'border-box',
-              }}
+              className="main-layout-scroll"
               tabIndex={-1}
             >
               <div key={location.pathname} className="page-entrance" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
@@ -101,6 +111,9 @@ export default function Layout() {
               </div>
             </main>
           </div>
+
+          {/* Primary Mobile Bottom Navigation Bar */}
+          <MobileBottomNav />
         </div>
         {toasts.map(t => (
           <ErrorToast key={t.id} message={t.message} type={t.type} onClose={() => dismiss(t.id)} />
