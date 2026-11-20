@@ -414,8 +414,8 @@ export default function Login() {
           transition: 'background var(--transition)',
         }}
       >
-        {/* Top Bar: Theme Switcher Toggle pinned to top-right */}
-        <div style={{ position: 'absolute', top: '1.25rem', right: '1.5rem', zIndex: 20 }}>
+        {/* Top Bar: Theme Switcher Toggle pinned to top-right (desktop only, hidden on mobile view) */}
+        <div className="desktop-only-flex" style={{ position: 'absolute', top: '1.25rem', right: '1.5rem', zIndex: 20 }}>
           <button
             onClick={toggleTheme}
             className="btn btn-secondary"

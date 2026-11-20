@@ -12,7 +12,8 @@ import {
   ExternalLink, Copy, Check, Play, RefreshCw, AlertCircle,
   ShieldCheck, Radio, Search, Sparkles, Sliders, MessageSquare,
   FileText, ChevronDown, ChevronUp, Info, Clock, CheckCircle2,
-  Terminal, ShieldAlert, GitCompare, Layers, Eye, Activity, AlertTriangle, Zap
+  Terminal, ShieldAlert, GitCompare, Layers, Eye, Activity, AlertTriangle, Zap,
+  History, RotateCcw
 } from 'lucide-react';
 
 // Preset question queries for Tab 1 ("Ask an AI Question")
@@ -104,6 +105,41 @@ export default function Playground() {
   const [expandedClaim, setExpandedClaim] = useState<Record<string, boolean>>({});
   const [diffViewMode, setDiffViewMode] = useState<'split' | 'inline'>('split');
   const { copied, copy } = useClipboard();
+
+  // ── Recent Searches / Verifications History ──
+  const [recentHistory, setRecentHistory] = useState<ResponseDoc[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const loadRecentHistory = useCallback(async () => {
+    try {
+      setHistoryLoading(true);
+      const res = await api.getResponses(1, 10);
+      if (res && res.data && res.data.length > 0) {
+        setRecentHistory(res.data);
+        try {
+          localStorage.setItem('freshnessguard_recent_searches', JSON.stringify(res.data.slice(0, 10)));
+        } catch {}
+      } else {
+        const cached = localStorage.getItem('freshnessguard_recent_searches');
+        if (cached) {
+          setRecentHistory(JSON.parse(cached));
+        }
+      }
+    } catch {
+      try {
+        const cached = localStorage.getItem('freshnessguard_recent_searches');
+        if (cached) {
+          setRecentHistory(JSON.parse(cached));
+        }
+      } catch {}
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecentHistory();
+  }, [loadRecentHistory]);
 
   // Helper to render interactive visual diff showing stale strikethroughs & live Tavily corrections
   const renderInlineDiff = (text: string, claims: any[]) => {
@@ -369,6 +405,15 @@ export default function Playground() {
       try {
         sessionStorage.setItem('freshnessguard_last_response', JSON.stringify(data));
       } catch {}
+
+      setRecentHistory(prev => {
+        const filtered = prev.filter(p => (p._id || p.requestId) !== (data._id || data.requestId));
+        const updated = [data, ...filtered].slice(0, 10);
+        try {
+          localStorage.setItem('freshnessguard_recent_searches', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
 
       if (mode === 'async') {
         setIsAsyncWaiting(true);
@@ -1476,6 +1521,156 @@ export default function Playground() {
 
         </div>
       )}
+
+      {/* ── Recent Verifications & Searches Section (Top 5–10 Recents) ── */}
+      <div
+        className="panel"
+        style={{
+          background: 'var(--panel)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--panel-shadow)',
+          padding: '1.25rem 1.5rem',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <History size={18} color="var(--accent)" />
+            <div>
+              <h3 style={{ fontSize: '1rem', margin: 0, fontWeight: 700 }}>
+                Recent Verifications &amp; Searches
+              </h3>
+              <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: '2px 0 0' }}>
+                Your top 5–10 recent verification runs. Click to reload in Playground or inspect evidence.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={loadRecentHistory}
+            disabled={historyLoading}
+            style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <RefreshCw size={12} style={historyLoading ? { animation: 'spin 0.75s linear infinite' } : {}} />
+            <span>{historyLoading ? 'Refreshing…' : 'Refresh'}</span>
+          </button>
+        </div>
+
+        {recentHistory.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '1.5rem 1rem', color: 'var(--muted)', fontSize: '0.85rem' }}>
+            <Clock size={24} style={{ margin: '0 auto 6px', opacity: 0.5 }} />
+            <div>No previous searches recorded yet.</div>
+            <div style={{ fontSize: '0.75rem', marginTop: 2 }}>Run a query above to start building your live verification history.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {recentHistory.map((item, idx) => {
+              const scorePct = Math.round((item.overallScore ?? 1) * 100);
+              const isStale = (item.staleCount ?? 0) > 0;
+              const itemId = item._id || item.requestId || `rec-${idx}`;
+              const queryText = item.question || item.originalText;
+
+              return (
+                <div
+                  key={itemId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--card-subtle)',
+                    borderLeft: `4px solid ${isStale ? 'var(--stale)' : 'var(--current)'}`,
+                    border: '1px solid var(--border)',
+                    borderLeftWidth: 4,
+                    flexWrap: 'wrap',
+                    gap: 12,
+                    transition: 'all var(--transition)',
+                  }}
+                >
+                  {/* Left: Query snippet and metadata */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 340px', minWidth: 0 }}>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        fontSize: '0.6875rem',
+                        fontWeight: 700,
+                        fontFamily: 'var(--font-mono)',
+                        background: isStale ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                        color: isStale ? 'var(--stale)' : 'var(--current)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {scorePct}%
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="truncate" style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
+                        {cleanMarkdownText(queryText)}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', color: 'var(--muted)', marginTop: 2, flexWrap: 'wrap' }}>
+                        <span>{item.model}</span>
+                        <span>•</span>
+                        <span style={{ color: isStale ? 'var(--stale)' : 'var(--current)', fontWeight: 600 }}>
+                          {isStale ? `${item.staleCount} stale` : 'Fresh'}
+                        </span>
+                        {item.checkedAt && (
+                          <>
+                            <span>•</span>
+                            <span>{new Date(item.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Action Buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setResult(item);
+                        if (item.question) {
+                          setQuestionText(item.question);
+                          setActiveTab('ask');
+                        } else {
+                          setResponseText(item.originalText);
+                          setActiveTab('paste');
+                        }
+                        window.scrollTo({ top: 380, behavior: 'smooth' });
+                      }}
+                      style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}
+                      title="Load into Playground view"
+                    >
+                      <RotateCcw size={12} />
+                      <span>Load</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        try {
+                          sessionStorage.setItem('freshnessguard_last_response', JSON.stringify(item));
+                        } catch {}
+                        navigate(`/inspector/${itemId}`, { state: { doc: item } });
+                      }}
+                      style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4, color: 'var(--accent)', fontWeight: 600 }}
+                      title="Inspect full claims & evidence"
+                    >
+                      <span>Inspect</span>
+                      <ExternalLink size={12} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
