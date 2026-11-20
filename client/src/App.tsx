@@ -25,7 +25,7 @@ export default function App() {
     <ThemeProvider>
       <GlobalBackground />
       <AuthProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <BrowserRouter>
           <Routes>
             {/* Public Authentication Routes */}
             <Route path="/login" element={<Login />} />
