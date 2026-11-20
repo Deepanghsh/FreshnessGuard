@@ -7,11 +7,12 @@ import type { ResponseDoc, Mode, SSEEvent } from '../types';
 import ScoreRing from '../components/ScoreRing';
 import ClaimBadge from '../components/ClaimBadge';
 import SummaryBadge from '../components/SummaryBadge';
+import { MarkdownRenderer, cleanMarkdownText } from '../components/MarkdownRenderer';
 import {
   ExternalLink, Copy, Check, Play, RefreshCw, AlertCircle,
   ShieldCheck, Radio, Search, Sparkles, Sliders, MessageSquare,
   FileText, ChevronDown, ChevronUp, Info, Clock, CheckCircle2,
-  Terminal, ShieldAlert, GitCompare, Layers, Eye, Activity, AlertTriangle
+  Terminal, ShieldAlert, GitCompare, Layers, Eye, Activity, AlertTriangle, Zap
 } from 'lucide-react';
 
 // Preset question queries for Tab 1 ("Ask an AI Question")
@@ -1003,7 +1004,21 @@ export default function Playground() {
           )}
 
           {/* ── Top Section: Executive Freshness Summary Bar ── */}
-          <div className="panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+          <div
+            className="panel"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 16,
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1.25rem 1.5rem',
+              boxShadow: 'var(--panel-shadow)',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <ScoreRing score={result.overallScore} size={68} strokeWidth={5.5} label="Overall freshness score" />
               <div>
@@ -1019,7 +1034,9 @@ export default function Playground() {
                   </div>
                 </div>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span>Extracted <strong>{result.totalClaims}</strong> assertion{result.totalClaims === 1 ? '' : 's'}:</span>
+                  <span>
+                    Extracted <strong>{result.claims?.length ?? result.totalClaims ?? 0}</strong> assertion{(result.claims?.length ?? result.totalClaims) === 1 ? '' : 's'}:
+                  </span>
                   <span style={{ color: 'var(--stale)', fontWeight: 700 }}>{staleClaims.length} stale</span>
                   <span>•</span>
                   <span style={{ color: 'var(--current)', fontWeight: 700 }}>{currentClaims.length} current</span>
@@ -1030,8 +1047,8 @@ export default function Playground() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ background: 'var(--card-subtle)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.625rem', color: 'var(--muted)', textTransform: 'uppercase' }}>Confidence</div>
+              <div style={{ background: 'var(--card-subtle)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', padding: '6px 14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.625rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Confidence</div>
                 <div
                   style={{
                     fontSize: result.totalClaims === 0 || !result.claims || result.claims.length === 0 || result.overallConfidence == null ? '0.875rem' : '1rem',
@@ -1046,8 +1063,8 @@ export default function Playground() {
                     : `${(result.overallConfidence * 100).toFixed(0)}%`}
                 </div>
               </div>
-              <div style={{ background: 'var(--card-subtle)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.625rem', color: 'var(--muted)', textTransform: 'uppercase' }}>Latency</div>
+              <div style={{ background: 'var(--card-subtle)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', padding: '6px 14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.625rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Latency</div>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
                   {result.processingMs}ms
                 </div>
@@ -1064,18 +1081,22 @@ export default function Playground() {
           </div>
 
           {/* ── Middle Section: Mode Switcher & Response Inspection ── */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginTop: '0.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '0.78rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Response Inspection View:
+              <Terminal size={16} color="var(--accent)" />
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Response Inspection View
+              </span>
+              <span className="badge badge-muted" style={{ fontSize: '0.6875rem' }}>
+                {diffViewMode === 'split' ? 'Dual Response Comparison' : 'Inline Visual Diff'}
               </span>
             </div>
-            <div style={{ display: 'flex', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: 3, gap: 4 }}>
+            <div style={{ display: 'flex', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', padding: 3, gap: 4 }}>
               <button
                 type="button"
                 onClick={() => setDiffViewMode('split')}
                 style={{
-                  padding: '4px 12px',
+                  padding: '5px 14px',
                   borderRadius: 4,
                   fontSize: '0.75rem',
                   fontWeight: 600,
@@ -1085,7 +1106,7 @@ export default function Playground() {
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 5,
+                  gap: 6,
                   transition: 'all var(--transition-btn)',
                 }}
               >
@@ -1096,7 +1117,7 @@ export default function Playground() {
                 type="button"
                 onClick={() => setDiffViewMode('inline')}
                 style={{
-                  padding: '4px 12px',
+                  padding: '5px 14px',
                   borderRadius: 4,
                   fontSize: '0.75rem',
                   fontWeight: 700,
@@ -1106,7 +1127,7 @@ export default function Playground() {
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 5,
+                  gap: 6,
                   transition: 'all var(--transition-btn)',
                 }}
               >
@@ -1125,7 +1146,8 @@ export default function Playground() {
                 border: '1px solid var(--border)',
                 borderLeft: '4px solid var(--accent)',
                 boxShadow: 'var(--panel-shadow)',
-                padding: '1.25rem',
+                padding: '1.25rem 1.5rem',
+                borderRadius: 'var(--radius-md)',
                 width: '100%',
                 boxSizing: 'border-box',
               }}
@@ -1137,7 +1159,7 @@ export default function Playground() {
                     Live Temporal Interception Diff (Original vs Corroborated Ground Truth)
                   </h3>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.75rem', flexWrap: 'wrap' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--stale)' }}>
                     <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--stale)' }} />
                     Stale Claim (Strikethrough)
@@ -1160,12 +1182,12 @@ export default function Playground() {
               <div
                 style={{
                   background: 'var(--card-subtle)',
-                  padding: '14px 16px',
+                  padding: '16px 20px',
                   borderRadius: 8,
                   border: '1px solid var(--border)',
                   fontFamily: 'var(--font-body)',
-                  fontSize: '0.92rem',
-                  lineHeight: 1.8,
+                  fontSize: '0.9375rem',
+                  lineHeight: 1.85,
                   color: 'var(--text)',
                 }}
               >
@@ -1177,7 +1199,7 @@ export default function Playground() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))',
                 gap: '1.25rem',
                 alignItems: 'stretch',
                 width: '100%',
@@ -1190,19 +1212,26 @@ export default function Playground() {
                 style={{
                   background: 'var(--panel)',
                   border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
                   boxShadow: 'var(--panel-shadow)',
                   display: 'flex',
                   flexDirection: 'column',
+                  padding: '1.25rem 1.5rem',
                   height: '100%',
                   boxSizing: 'border-box',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Terminal size={15} color="var(--accent)" />
-                    <h3 style={{ fontSize: '0.875rem', margin: 0, fontWeight: 700 }}>
-                      {result.question ? `Answer to: "${result.question}"` : 'AI Response Text'}
+                    <h3 style={{ fontSize: '0.95rem', margin: 0, fontWeight: 700 }}>
+                      {result.question ? `Answer to: "${result.question}"` : 'Original AI Response'}
                     </h3>
+                    {staleClaims.length > 0 && (
+                      <span className="badge badge-stale" style={{ fontSize: '0.6875rem' }}>
+                        {staleClaims.length} Stale Fact{staleClaims.length > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                   <button
                     className="btn btn-secondary"
@@ -1216,21 +1245,13 @@ export default function Playground() {
 
                 <div
                   style={{
-                    background: 'var(--card-subtle)',
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    border: '1px solid var(--border)',
-                    fontFamily: 'var(--font-body)',
-                    fontSize: '0.8125rem',
-                    lineHeight: 1.6,
-                    color: 'var(--text-soft)',
-                    whiteSpace: 'pre-wrap',
-                    maxHeight: '140px',
-                    overflowY: 'auto',
                     flex: 1,
+                    minHeight: '80px',
+                    maxHeight: '380px',
+                    overflowY: 'auto',
                   }}
                 >
-                  {result.originalText}
+                  <MarkdownRenderer content={result.originalText} />
                 </div>
               </div>
 
@@ -1238,17 +1259,28 @@ export default function Playground() {
               <div
                 className="panel"
                 style={{
-                  borderLeft: '3px solid var(--current)',
+                  background: 'var(--panel)',
+                  border: '1px solid var(--border)',
+                  borderLeft: '4px solid var(--current)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--panel-shadow)',
                   display: 'flex',
                   flexDirection: 'column',
+                  padding: '1.25rem 1.5rem',
                   height: '100%',
                   boxSizing: 'border-box',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <h3 style={{ fontSize: '0.875rem', color: 'var(--current)', margin: 0, display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
-                    <ShieldCheck size={15} /> Live Corrected AI Response (Tavily Corroborated)
-                  </h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ShieldCheck size={16} color="var(--current)" />
+                    <h3 style={{ fontSize: '0.95rem', color: 'var(--current)', margin: 0, fontWeight: 700 }}>
+                      Live Corrected AI Response
+                    </h3>
+                    <span className="badge badge-current" style={{ fontSize: '0.6875rem' }}>
+                      Tavily Corroborated
+                    </span>
+                  </div>
                   {result.correctedAnswer && (
                     <button
                       className="btn btn-secondary"
@@ -1260,29 +1292,25 @@ export default function Playground() {
                     </button>
                   )}
                 </div>
+
                 <div
                   style={{
-                    background: result.correctedAnswer ? 'rgba(52, 211, 153, 0.05)' : 'var(--card-subtle)',
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    border: `1px solid ${result.correctedAnswer ? 'rgba(52, 211, 153, 0.2)' : 'var(--border)'}`,
-                    maxHeight: '140px',
-                    overflowY: 'auto',
                     flex: 1,
+                    minHeight: '80px',
+                    maxHeight: '380px',
+                    overflowY: 'auto',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: result.correctedAnswer ? 'flex-start' : 'center',
                   }}
                 >
                   {result.correctedAnswer ? (
-                    <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: '0.8125rem', color: 'var(--text)' }}>
-                      {result.correctedAnswer}
-                    </p>
+                    <MarkdownRenderer content={result.correctedAnswer} />
                   ) : (
-                    <div style={{ textAlign: 'center', padding: '0.75rem', color: 'var(--muted)' }}>
-                      <CheckCircle2 size={20} color="var(--current)" style={{ margin: '0 auto 4px' }} />
-                      <div style={{ fontWeight: 600, color: 'var(--current)', fontSize: '0.875rem' }}>All Claims Fresh &amp; Current</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 2 }}>
+                    <div style={{ textAlign: 'center', padding: '1.5rem 1rem', color: 'var(--muted)' }}>
+                      <CheckCircle2 size={28} color="var(--current)" style={{ margin: '0 auto 8px' }} />
+                      <div style={{ fontWeight: 700, color: 'var(--current)', fontSize: '0.95rem' }}>All Claims Fresh &amp; Current</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: 4 }}>
                         Tavily live search corroboration confirmed all factual assertions.
                       </div>
                     </div>
@@ -1293,7 +1321,7 @@ export default function Playground() {
           )}
 
           {/* ── Summary Claim List with Verdict Badges & Claim-Level Navigation ── */}
-          <div className="panel" style={{ width: '100%', boxSizing: 'border-box' }}>
+          <div className="panel" style={{ width: '100%', boxSizing: 'border-box', borderRadius: 'var(--radius-md)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Search size={16} color="var(--accent)" />
@@ -1328,7 +1356,7 @@ export default function Playground() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '10px 14px',
+                        padding: '12px 16px',
                         borderRadius: 'var(--radius-sm)',
                         background: 'var(--card-subtle)',
                         borderLeft: `4px solid ${verdictColor}`,
@@ -1340,7 +1368,7 @@ export default function Playground() {
                         animationDelay: `${i * 50}ms`,
                       }}
                     >
-                      {/* Left: Number, Category, and Short Claim Text */}
+                      {/* Left: Number, Category, Short Claim Text, and Live Value */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 320px', minWidth: 0 }}>
                         <span
                           style={{
@@ -1360,8 +1388,15 @@ export default function Playground() {
                           {i + 1}
                         </span>
                         <span className="badge badge-muted" style={{ fontSize: '0.6875rem' }}>{c.category}</span>
-                        <div className="truncate" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
-                          {c.text}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="truncate" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)' }}>
+                            {cleanMarkdownText(c.text)}
+                          </div>
+                          {c.verdict === 'stale' && c.liveValue && (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--current)', fontWeight: 600, marginTop: 2 }}>
+                              <Zap size={11} /> <span>Tavily Live: {cleanMarkdownText(c.liveValue)}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1387,7 +1422,7 @@ export default function Playground() {
                             });
                           }}
                           style={{
-                            padding: '4px 10px',
+                            padding: '5px 12px',
                             fontSize: '0.75rem',
                             fontWeight: 700,
                             display: 'flex',
@@ -1415,6 +1450,7 @@ export default function Playground() {
               background: 'var(--panel)',
               borderLeft: `4px solid ${result.staleCount > 0 ? 'var(--stale)' : result.totalClaims === 0 ? 'var(--muted)' : 'var(--current)'}`,
               padding: '12px 16px',
+              borderRadius: 'var(--radius-sm)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
